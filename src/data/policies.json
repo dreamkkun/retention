@@ -1,0 +1,518 @@
+{
+  "metadata": {
+    "version": "v3.1",
+    "last_updated": "2026-02-24",
+    "update_week": "2월 4주차",
+    "currency": "KRW",
+    "unit": "만원 (10,000 KRW)",
+    "source": "리텐션 고객정책 문서"
+  },
+  "notices": [
+    {
+      "id": "notice_001",
+      "date": "2026-02-24",
+      "type": "urgent",
+      "title": "20천원 이상 요금제 상품권 증액!",
+      "content": "요금제 상향(1G) 선택 시 30만원 상품권 제공"
+    }
+  ],
+  "color_guide": [
+    { "category": "maintain", "name": "요금제 유지", "color": "green", "bg": "bg-green-100", "border": "border-green-500", "text": "text-green-900" },
+    { "category": "upgrade", "name": "요금제 상향", "color": "blue", "bg": "bg-blue-100", "border": "border-blue-500", "text": "text-blue-900" },
+    { "category": "middle", "name": "중간요금제", "color": "orange", "bg": "bg-orange-100", "border": "border-orange-500", "text": "text-orange-900" },
+    { "category": "lowest", "name": "최저요금제", "color": "gray", "bg": "bg-gray-100", "border": "border-gray-500", "text": "text-gray-900" },
+    { "category": "standalone", "name": "단독전환", "color": "pink", "bg": "bg-pink-100", "border": "border-pink-500", "text": "text-pink-900" },
+    { "category": "equal_bundle", "name": "동등결합", "color": "teal", "bg": "bg-teal-100", "border": "border-teal-500", "text": "text-teal-900" }
+  ],
+  "bundle_retention_matrix": {
+    "description": "번들 재약정 요금제별 상품권 혜택 (Matrix 구조)",
+    "columns": [
+      {
+        "id": "maintain",
+        "name": "1. 요금제 유지",
+        "color": "green",
+        "sub_columns": [
+          { "id": "unified", "name": "통일요금", "description": "WiFi+ 등" },
+          { "id": "wifi_plus", "name": "WiFi+", "description": "통일요금" }
+        ]
+      },
+      {
+        "id": "upgrade",
+        "name": "2. 요금제 상향",
+        "color": "blue",
+        "sub_columns": [
+          { "id": "1g", "name": "1G", "description": "기가급" },
+          { "id": "500m", "name": "500M", "description": "프리미엄" },
+          { "id": "gwanglan", "name": "광랜", "description": "일반광랜" }
+        ],
+        "recommended": true
+      },
+      {
+        "id": "middle",
+        "name": "3. 중간요금제",
+        "color": "orange",
+        "sub_columns": [
+          { "id": "half_price", "name": "반값요금", "description": "50% 할인" }
+        ]
+      },
+      {
+        "id": "lowest",
+        "name": "4. 최저요금제",
+        "color": "gray",
+        "sub_columns": [
+          { "id": "special", "name": "특화요금", "description": "최저가" }
+        ]
+      },
+      {
+        "id": "standalone",
+        "name": "5. 단독전환",
+        "color": "pink",
+        "sub_columns": [
+          { "id": "internet_only", "name": "인터넷 단독", "description": "번들해지" }
+        ]
+      }
+    ],
+    "rows": [
+      {
+        "id": "over_20k",
+        "name": "20천원 이상",
+        "description": "고가 요금제",
+        "data": {
+          "maintain": {
+            "unified": { "gift_card": 30, "iptv": 0, "notes": "WiFi+ 통일요금" },
+            "wifi_plus": { "gift_card": 30, "iptv": 0, "notes": "WiFi+" }
+          },
+          "upgrade": {
+            "1g": { "gift_card": 30, "iptv": 0, "notes": "1기가" },
+            "500m": { "gift_card": 25, "iptv": 0, "notes": "500M" },
+            "gwanglan": { "gift_card": 20, "iptv": 0, "notes": "광랜" }
+          },
+          "middle": {
+            "half_price": { "gift_card": 20, "iptv": 0, "notes": "반값요금" }
+          },
+          "lowest": {
+            "special": { "gift_card": 15, "iptv": 0, "notes": "특화요금" }
+          },
+          "standalone": {
+            "internet_only": { "gift_card": 0, "iptv": 0, "notes": "혜택없음" }
+          }
+        }
+      },
+      {
+        "id": "over_18k",
+        "name": "18천원 이상",
+        "description": "중고가 요금제",
+        "data": {
+          "maintain": {
+            "unified": { "gift_card": 27, "iptv": 0, "notes": "WiFi+ 통일요금" },
+            "wifi_plus": { "gift_card": 27, "iptv": 0, "notes": "WiFi+" }
+          },
+          "upgrade": {
+            "1g": { "gift_card": 27, "iptv": 0, "notes": "1기가" },
+            "500m": { "gift_card": 23, "iptv": 0, "notes": "500M" },
+            "gwanglan": { "gift_card": 18, "iptv": 0, "notes": "광랜" }
+          },
+          "middle": {
+            "half_price": { "gift_card": 18, "iptv": 0, "notes": "반값요금" }
+          },
+          "lowest": {
+            "special": { "gift_card": 13, "iptv": 0, "notes": "특화요금" }
+          },
+          "standalone": {
+            "internet_only": { "gift_card": 0, "iptv": 0, "notes": "혜택없음" }
+          }
+        }
+      },
+      {
+        "id": "over_15k",
+        "name": "15천원 이상",
+        "description": "중가 요금제",
+        "data": {
+          "maintain": {
+            "unified": { "gift_card": 24, "iptv": 0, "notes": "WiFi+ 통일요금" },
+            "wifi_plus": { "gift_card": 24, "iptv": 0, "notes": "WiFi+" }
+          },
+          "upgrade": {
+            "1g": { "gift_card": 24, "iptv": 0, "notes": "1기가" },
+            "500m": { "gift_card": 20, "iptv": 0, "notes": "500M" },
+            "gwanglan": { "gift_card": 16, "iptv": 0, "notes": "광랜" }
+          },
+          "middle": {
+            "half_price": { "gift_card": 16, "iptv": 0, "notes": "반값요금" }
+          },
+          "lowest": {
+            "special": { "gift_card": 12, "iptv": 0, "notes": "특화요금" }
+          },
+          "standalone": {
+            "internet_only": { "gift_card": 0, "iptv": 0, "notes": "혜택없음" }
+          }
+        }
+      },
+      {
+        "id": "over_12k",
+        "name": "12천원 이상",
+        "description": "일반 요금제",
+        "data": {
+          "maintain": {
+            "unified": { "gift_card": 21, "iptv": 0, "notes": "WiFi+ 통일요금" },
+            "wifi_plus": { "gift_card": 21, "iptv": 0, "notes": "WiFi+" }
+          },
+          "upgrade": {
+            "1g": { "gift_card": 21, "iptv": 0, "notes": "1기가" },
+            "500m": { "gift_card": 18, "iptv": 0, "notes": "500M" },
+            "gwanglan": { "gift_card": 14, "iptv": 0, "notes": "광랜" }
+          },
+          "middle": {
+            "half_price": { "gift_card": 14, "iptv": 0, "notes": "반값요금" }
+          },
+          "lowest": {
+            "special": { "gift_card": 10, "iptv": 0, "notes": "특화요금" }
+          },
+          "standalone": {
+            "internet_only": { "gift_card": 0, "iptv": 0, "notes": "혜택없음" }
+          }
+        }
+      },
+      {
+        "id": "over_10k",
+        "name": "10천원 이상",
+        "description": "저가 요금제",
+        "data": {
+          "maintain": {
+            "unified": { "gift_card": 18, "iptv": 0, "notes": "WiFi+ 통일요금" },
+            "wifi_plus": { "gift_card": 18, "iptv": 0, "notes": "WiFi+" }
+          },
+          "upgrade": {
+            "1g": { "gift_card": 18, "iptv": 0, "notes": "1기가" },
+            "500m": { "gift_card": 15, "iptv": 0, "notes": "500M" },
+            "gwanglan": { "gift_card": 12, "iptv": 0, "notes": "광랜" }
+          },
+          "middle": {
+            "half_price": { "gift_card": 12, "iptv": 0, "notes": "반값요금" }
+          },
+          "lowest": {
+            "special": { "gift_card": 9, "iptv": 0, "notes": "특화요금" }
+          },
+          "standalone": {
+            "internet_only": { "gift_card": 0, "iptv": 0, "notes": "혜택없음" }
+          }
+        }
+      },
+      {
+        "id": "under_10k",
+        "name": "10천원 미만",
+        "description": "최저가 요금제",
+        "data": {
+          "maintain": {
+            "unified": { "gift_card": 15, "iptv": 0, "notes": "WiFi+ 통일요금" },
+            "wifi_plus": { "gift_card": 15, "iptv": 0, "notes": "WiFi+" }
+          },
+          "upgrade": {
+            "1g": { "gift_card": 15, "iptv": 0, "notes": "1기가" },
+            "500m": { "gift_card": 13, "iptv": 0, "notes": "500M" },
+            "gwanglan": { "gift_card": 10, "iptv": 0, "notes": "광랜" }
+          },
+          "middle": {
+            "half_price": { "gift_card": 10, "iptv": 0, "notes": "반값요금" }
+          },
+          "lowest": {
+            "special": { "gift_card": 7, "iptv": 0, "notes": "특화요금" }
+          },
+          "standalone": {
+            "internet_only": { "gift_card": 0, "iptv": 0, "notes": "혜택없음" }
+          }
+        }
+      }
+    ]
+  },
+  "digital_renewal": {
+    "description": "디지털(TV) 재약정 정책",
+    "main_products": [
+      {
+        "id": "uhd",
+        "name": "UHD (주상품)",
+        "monthly_fee": 14.3,
+        "benefits": {
+          "maintain": {
+            "gift_card": 20,
+            "discount": 5,
+            "notes": "현재 요금 유지"
+          },
+          "upgrade": {
+            "gift_card": 25,
+            "discount": 7,
+            "notes": "프리미엄 채널 추가"
+          }
+        }
+      },
+      {
+        "id": "hd",
+        "name": "HD (주상품)",
+        "monthly_fee": 12.1,
+        "benefits": {
+          "maintain": {
+            "gift_card": 15,
+            "discount": 3,
+            "notes": "현재 요금 유지"
+          },
+          "upgrade": {
+            "gift_card": 20,
+            "discount": 5,
+            "notes": "UHD로 업그레이드"
+          }
+        }
+      }
+    ],
+    "sub_products": [
+      {
+        "id": "basic",
+        "name": "기본형",
+        "monthly_fee": 8.8,
+        "gift_card": 10
+      },
+      {
+        "id": "light",
+        "name": "라이트",
+        "monthly_fee": 6.6,
+        "gift_card": 7
+      }
+    ]
+  },
+  "single_tv": {
+    "description": "단독 TV 고객 정책",
+    "tv_only_customers": {
+      "before_price_increase": {
+        "description": "단독TV 요금인상 전 고객",
+        "retention_offers": {
+          "maintain": { "gift_card": { "3_year": 4, "4_year": 5, "5_year": 6 } },
+          "upgrade": { "gift_card": { "3_year": 5, "4_year": 6, "5_year": 8 } },
+          "downgrade": { "gift_card": { "3_year": 0, "4_year": 0, "5_year": 0 } }
+        }
+      },
+      "after_price_increase": {
+        "description": "단독TV 요금인상 후 고객",
+        "retention_offers": {
+          "maintain": { "gift_card": { "3_year": 5, "4_year": 6, "5_year": 7 } },
+          "upgrade": { "gift_card": { "3_year": 6, "4_year": 7, "5_year": 9 } },
+          "downgrade": { "gift_card": { "3_year": 0, "4_year": 0, "5_year": 0 } }
+        }
+      }
+    },
+    "bundling_incentives": {
+      "description": "단독TV → 번들 전환 혜택",
+      "internet_addition": {
+        "description": "인터넷 추가 시",
+        "gift_card": 10,
+        "iptv_discount": { "1_year": 10, "2_years": 20, "permanent": "가능" }
+      }
+    }
+  },
+  "new_service": {
+    "description": "후번들 및 업셀링 혜택",
+    "post_bundle": {
+      "description": "후번들 혜택",
+      "additional_line_benefits": {
+        "gift_card": { "1_line_addition": 5, "2_line_addition": 10, "3_line_addition": 15 },
+        "iptv_benefits": {
+          "description": "IPTV 추가 시",
+          "gift_card": 10,
+          "discount": { "1_year": 10, "2_years": 20 }
+        }
+      }
+    },
+    "upselling": {
+      "description": "업셀링 혜택",
+      "price_tier_upgrade": {
+        "any_upgrade": { "gift_card": 2, "iptv_discount": 2 }
+      }
+    }
+  },
+  "price_increase_care": {
+    "description": "요금인상 Care 정책",
+    "targets": ["2026년 2월 요금인상 대상 고객", "불만/해지 의사 표현 고객"],
+    "benefits": { "gift_card_bonus": 2, "description": "기본 혜택 대비 2만원 추가 지급" }
+  },
+  "equal_bundle": {
+    "description": "동등결합 상품 이용 고객 정책",
+    "note": "동등결합은 인터넷+디지털 결합 상품 이용 고객 대상",
+    "categories": [
+      {
+        "id": "maintain",
+        "name": "요금제 유지",
+        "description": "현재 요금제 유지",
+        "gift_card": 18
+      },
+      {
+        "id": "change",
+        "name": "요금제 변경",
+        "description": "요금제 변경 시",
+        "gift_card": 20
+      },
+      {
+        "id": "discount",
+        "name": "할인 적용",
+        "description": "추가 할인 제공",
+        "gift_card": 15,
+        "discount": 5
+      },
+      {
+        "id": "contract_change",
+        "name": "약정 변경",
+        "description": "약정 기간 변경",
+        "gift_card": 22
+      }
+    ]
+  },
+  "d_standalone": {
+    "description": "D단독 (디지털 단독) 고객 정책",
+    "note": "디지털(TV) 단독 이용 고객",
+    "price_tiers": [
+      {
+        "id": "over_14k",
+        "name": "14천원 이상",
+        "description": "UHD급 단독",
+        "policies": {
+          "maintain": {
+            "gift_card": 20,
+            "discount": 0,
+            "description": "요금제 유지"
+          },
+          "change": {
+            "gift_card": 22,
+            "discount": 0,
+            "description": "요금제 변경"
+          },
+          "discount_apply": {
+            "gift_card": 18,
+            "discount": 3,
+            "description": "할인 적용"
+          },
+          "contract_change": {
+            "gift_card": 25,
+            "discount": 0,
+            "description": "약정 변경"
+          }
+        }
+      },
+      {
+        "id": "over_12k",
+        "name": "12천원 이상",
+        "description": "HD급 단독",
+        "policies": {
+          "maintain": {
+            "gift_card": 18,
+            "discount": 0,
+            "description": "요금제 유지"
+          },
+          "change": {
+            "gift_card": 20,
+            "discount": 0,
+            "description": "요금제 변경"
+          },
+          "discount_apply": {
+            "gift_card": 16,
+            "discount": 2,
+            "description": "할인 적용"
+          },
+          "contract_change": {
+            "gift_card": 22,
+            "discount": 0,
+            "description": "약정 변경"
+          }
+        }
+      },
+      {
+        "id": "over_8k",
+        "name": "8천원 이상",
+        "description": "기본형 단독",
+        "policies": {
+          "maintain": {
+            "gift_card": 15,
+            "discount": 0,
+            "description": "요금제 유지"
+          },
+          "change": {
+            "gift_card": 17,
+            "discount": 0,
+            "description": "요금제 변경"
+          },
+          "discount_apply": {
+            "gift_card": 13,
+            "discount": 2,
+            "description": "할인 적용"
+          },
+          "contract_change": {
+            "gift_card": 19,
+            "discount": 0,
+            "description": "약정 변경"
+          }
+        }
+      },
+      {
+        "id": "under_8k",
+        "name": "8천원 미만",
+        "description": "라이트 단독",
+        "policies": {
+          "maintain": {
+            "gift_card": 12,
+            "discount": 0,
+            "description": "요금제 유지"
+          },
+          "change": {
+            "gift_card": 14,
+            "discount": 0,
+            "description": "요금제 변경"
+          },
+          "discount_apply": {
+            "gift_card": 10,
+            "discount": 1,
+            "description": "할인 적용"
+          },
+          "contract_change": {
+            "gift_card": 16,
+            "discount": 0,
+            "description": "약정 변경"
+          }
+        }
+      }
+    ]
+  },
+  "policy_images": [
+    {
+      "id": "image_1",
+      "filename": "c__Users_mylog_AppData_Roaming_Cursor_User_workspaceStorage_6b2d08629743496c971dc57008dc8810_images_image-39356d02-91b2-46e2-9f28-1657b757e435.png",
+      "title": "번들 재약정 정책 Matrix",
+      "category": "bundle"
+    },
+    {
+      "id": "image_2",
+      "filename": "c__Users_mylog_AppData_Roaming_Cursor_User_workspaceStorage_6b2d08629743496c971dc57008dc8810_images_2-f2950be3-d404-4762-9471-bb257f49604f.png",
+      "title": "동등결합 상품 이용 고객",
+      "category": "equal_bundle"
+    },
+    {
+      "id": "image_3",
+      "filename": "c__Users_mylog_AppData_Roaming_Cursor_User_workspaceStorage_6b2d08629743496c971dc57008dc8810_images_3-22e5a69d-0968-4474-9594-41ee8d7933b0.png",
+      "title": "D단독 재약정 정책",
+      "category": "d_standalone"
+    },
+    {
+      "id": "image_4",
+      "filename": "c__Users_mylog_AppData_Roaming_Cursor_User_workspaceStorage_6b2d08629743496c971dc57008dc8810_images_image-234ad620-ae84-4c8c-a916-2e94a073cba4.png",
+      "title": "단독 TV 재약정 정책",
+      "category": "single"
+    },
+    {
+      "id": "image_5",
+      "filename": "c__Users_mylog_AppData_Roaming_Cursor_User_workspaceStorage_6b2d08629743496c971dc57008dc8810_images_image-b9ca0722-c5b9-4832-a069-28665187f3e9.png",
+      "title": "조금만 2+Care 정책",
+      "category": "care"
+    },
+    {
+      "id": "image_6",
+      "filename": "c__Users_mylog_AppData_Roaming_Cursor_User_workspaceStorage_6b2d08629743496c971dc57008dc8810_images_image-0302bcb5-abfb-405b-ab80-fd2abaa66c78.png",
+      "title": "신규/후번들/업셀링",
+      "category": "new"
+    }
+  ]
+}
