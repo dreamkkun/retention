@@ -180,12 +180,12 @@ const AdminDashboard = ({ onLogout, isAdmin = true }) => {
       <div className="grid md:grid-cols-2 gap-6">
         {/* 정책 업로드 */}
         <div className="card">
-            <h2 className="text-xl font-bold text-gray-800 mb-4">
-              📤 정책 업로드
-            </h2>
+          <h2 className="text-xl font-bold text-gray-800 mb-4">
+            📤 정책 업로드
+          </h2>
 
-            <div className="space-y-4">
-              <div>
+          <div className="space-y-4">
+                <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-2">
                   업로드 유형
                 </label>
@@ -211,7 +211,7 @@ const AdminDashboard = ({ onLogout, isAdmin = true }) => {
                 />
               </div>
 
-              {selectedFile && (
+                {selectedFile && (
                 <div className="bg-gray-50 border border-gray-300 p-3 rounded">
                   <p className="text-sm text-gray-700">
                     선택된 파일: <span className="font-semibold">{selectedFile.name}</span>
@@ -245,12 +245,12 @@ const AdminDashboard = ({ onLogout, isAdmin = true }) => {
 
           {/* 템플릿 다운로드 */}
           <div className="card">
-            <h2 className="text-xl font-bold text-gray-800 mb-4">
+              <h2 className="text-xl font-bold text-gray-800 mb-4">
               📥 템플릿 다운로드
             </h2>
 
             <div className="space-y-4">
-              <div className="bg-gray-50 border border-gray-300 p-4 rounded">
+                <div className="bg-gray-50 border border-gray-300 p-4 rounded">
                 <h3 className="font-semibold text-gray-800 mb-2">📊 엑셀 템플릿</h3>
                 <p className="text-sm text-gray-600 mb-4">
                   정책 데이터를 입력할 수 있는 5개 시트로 구성된 엑셀 템플릿입니다.
@@ -290,85 +290,82 @@ const AdminDashboard = ({ onLogout, isAdmin = true }) => {
             </div>
           </div>
         </div>
-      </div>
 
-      {/* 빠른 작업 */}
-      <div className="card mt-6">
-          <h2 className="text-xl font-bold text-gray-800 mb-4">
-            ⚡ 빠른 작업
-          </h2>
+        {/* 빠른 작업 */}
+        <div className="card mt-6">
+        <h2 className="text-xl font-bold text-gray-800 mb-4">
+          ⚡ 빠른 작업
+        </h2>
 
-          <div className="grid md:grid-cols-3 gap-4">
-            <button className="p-4 border border-gray-300 rounded hover:bg-gray-50 transition-colors text-left">
-              <div className="text-2xl mb-2">📊</div>
-              <h3 className="font-semibold text-gray-800 mb-1">정책 조회</h3>
-              <p className="text-sm text-gray-600">현재 적용된 정책 확인</p>
-            </button>
+        <div className="grid md:grid-cols-3 gap-4">
+          <button className="p-4 border border-gray-300 rounded hover:bg-gray-50 transition-colors text-left">
+            <div className="text-2xl mb-2">📊</div>
+            <h3 className="font-semibold text-gray-800 mb-1">정책 조회</h3>
+            <p className="text-sm text-gray-600">현재 적용된 정책 확인</p>
+          </button>
 
-            <button className="p-4 border border-gray-300 rounded hover:bg-gray-50 transition-colors text-left">
-              <div className="text-2xl mb-2">📝</div>
-              <h3 className="font-semibold text-gray-800 mb-1">변경 이력</h3>
-              <p className="text-sm text-gray-600">정책 업데이트 내역</p>
-            </button>
+          <button className="p-4 border border-gray-300 rounded hover:bg-gray-50 transition-colors text-left">
+            <div className="text-2xl mb-2">📝</div>
+            <h3 className="font-semibold text-gray-800 mb-1">변경 이력</h3>
+            <p className="text-sm text-gray-600">정책 업데이트 내역</p>
+          </button>
 
-            <button className="p-4 border border-gray-300 rounded hover:bg-gray-50 transition-colors text-left">
-              <div className="text-2xl mb-2">👥</div>
-              <h3 className="font-semibold text-gray-800 mb-1">사용자 관리</h3>
-              <p className="text-sm text-gray-600">권한 설정 및 관리</p>
-            </button>
-          </div>
+          <button className="p-4 border border-gray-300 rounded hover:bg-gray-50 transition-colors text-left">
+            <div className="text-2xl mb-2">👥</div>
+            <h3 className="font-semibold text-gray-800 mb-1">사용자 관리</h3>
+            <p className="text-sm text-gray-600">권한 설정 및 관리</p>
+          </button>
         </div>
       </div>
 
       {/* 업데이트 가이드 */}
       <div className="card mt-6">
-          <h2 className="text-xl font-bold text-gray-800 mb-4">
-            📝 정책 업데이트 가이드
-          </h2>
+        <h2 className="text-xl font-bold text-gray-800 mb-4">
+          📝 정책 업데이트 가이드
+        </h2>
 
-          <div className="bg-blue-50 border border-blue-300 p-4 rounded mb-4">
-            <h3 className="font-semibold text-blue-900 mb-2">💡 엑셀 템플릿 구조</h3>
-            <div className="grid md:grid-cols-2 gap-4 text-sm text-blue-800">
-              <div>
-                <p className="font-semibold mb-2">📊 판가 기반 정책</p>
-                <ul className="space-y-1 ml-4">
-                  <li>• 판가구간: 고객 현재 요금</li>
-                  <li>• 방어정책: 유지/상향/중간/최저/단독</li>
-                  <li>• 세부상품: 1G, 500M, 광랜 등</li>
-                  <li>• 상품권: 즉시 지급 혜택</li>
-                  <li>• IPTV/할인: 추가 혜택</li>
-                </ul>
-              </div>
-              <div>
-                <p className="font-semibold mb-2">🎯 고객 유형별 정책</p>
-                <ul className="space-y-1 ml-4">
-                  <li>• 번들: 인터넷+디지털 결합</li>
-                  <li>• 동등결합: 특수 결합 상품</li>
-                  <li>• D단독: 디지털 단독</li>
-                  <li>• I단독: 인터넷 단독</li>
-                </ul>
-              </div>
+        <div className="bg-blue-50 border border-blue-300 p-4 rounded mb-4">
+          <h3 className="font-semibold text-blue-900 mb-2">💡 엑셀 템플릿 구조</h3>
+          <div className="grid md:grid-cols-2 gap-4 text-sm text-blue-800">
+            <div>
+              <p className="font-semibold mb-2">📊 판가 기반 정책</p>
+              <ul className="space-y-1 ml-4">
+                <li>• 판가구간: 고객 현재 요금</li>
+                <li>• 방어정책: 유지/상향/중간/최저/단독</li>
+                <li>• 세부상품: 1G, 500M, 광랜 등</li>
+                <li>• 상품권: 즉시 지급 혜택</li>
+                <li>• IPTV/할인: 추가 혜택</li>
+              </ul>
+            </div>
+            <div>
+              <p className="font-semibold mb-2">🎯 고객 유형별 정책</p>
+              <ul className="space-y-1 ml-4">
+                <li>• 번들: 인터넷+디지털 결합</li>
+                <li>• 동등결합: 특수 결합 상품</li>
+                <li>• D단독: 디지털 단독</li>
+                <li>• I단독: 인터넷 단독</li>
+              </ul>
             </div>
           </div>
+        </div>
 
-          <div className="grid md:grid-cols-3 gap-4">
-            <div className="border border-gray-300 p-4 rounded">
-              <div className="text-2xl mb-2">1️⃣</div>
-              <h3 className="font-semibold text-gray-800 mb-1">템플릿 다운로드</h3>
-              <p className="text-sm text-gray-600">5개 시트로 구성된 엑셀 파일을 다운로드합니다.</p>
-            </div>
+        <div className="grid md:grid-cols-3 gap-4">
+          <div className="border border-gray-300 p-4 rounded">
+            <div className="text-2xl mb-2">1️⃣</div>
+            <h3 className="font-semibold text-gray-800 mb-1">템플릿 다운로드</h3>
+            <p className="text-sm text-gray-600">5개 시트로 구성된 엑셀 파일을 다운로드합니다.</p>
+          </div>
 
-            <div className="border border-gray-300 p-4 rounded">
-              <div className="text-2xl mb-2">2️⃣</div>
-              <h3 className="font-semibold text-gray-800 mb-1">데이터 입력</h3>
-              <p className="text-sm text-gray-600">각 시트의 가이드를 참고하여 정책 데이터를 입력합니다.</p>
-            </div>
+          <div className="border border-gray-300 p-4 rounded">
+            <div className="text-2xl mb-2">2️⃣</div>
+            <h3 className="font-semibold text-gray-800 mb-1">데이터 입력</h3>
+            <p className="text-sm text-gray-600">각 시트의 가이드를 참고하여 정책 데이터를 입력합니다.</p>
+          </div>
 
-            <div className="border border-gray-300 p-4 rounded">
-              <div className="text-2xl mb-2">3️⃣</div>
-              <h3 className="font-semibold text-gray-800 mb-1">파일 업로드</h3>
-              <p className="text-sm text-gray-600">수정된 엑셀을 업로드하여 JSON으로 변환합니다.</p>
-            </div>
+          <div className="border border-gray-300 p-4 rounded">
+            <div className="text-2xl mb-2">3️⃣</div>
+            <h3 className="font-semibold text-gray-800 mb-1">파일 업로드</h3>
+            <p className="text-sm text-gray-600">수정된 엑셀을 업로드하여 JSON으로 변환합니다.</p>
           </div>
         </div>
       </div>
