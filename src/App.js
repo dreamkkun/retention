@@ -7,7 +7,6 @@ import AdminDashboard from './components/AdminDashboard';
 function App() {
   const [activeTab, setActiveTab] = useState('board');
   const [isAdmin, setIsAdmin] = useState(false);
-  const [showAdminPanel, setShowAdminPanel] = useState(false);
 
   useEffect(() => {
     const adminStatus = localStorage.getItem('isAdmin');
@@ -18,18 +17,16 @@ function App() {
 
   const handleLogin = (status) => {
     setIsAdmin(status);
-    setShowAdminPanel(status);
+    if (status) {
+      setActiveTab('admin');
+    }
   };
 
   const handleLogout = () => {
     setIsAdmin(false);
-    setShowAdminPanel(false);
     localStorage.removeItem('isAdmin');
+    setActiveTab('board');
   };
-
-  if (showAdminPanel) {
-    return <AdminDashboard onLogout={handleLogout} />;
-  }
 
   return (
     <div className="min-h-screen bg-white">
@@ -42,12 +39,11 @@ function App() {
             <p className="text-gray-600 text-sm mt-1">고객 상담을 위한 정책 조회 및 혜택 계산</p>
           </div>
           {isAdmin && (
-            <button
-              onClick={() => setShowAdminPanel(true)}
-              className="bg-gray-700 hover:bg-gray-800 text-white font-semibold py-2 px-4 rounded transition-colors"
-            >
-              ⚙️ 관리자
-            </button>
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-green-700 bg-green-50 px-3 py-1 rounded border border-green-300">
+                ✓ 관리자 로그인됨
+              </span>
+            </div>
           )}
         </div>
       </header>
@@ -75,12 +71,30 @@ function App() {
             >
               🧮 맞춤형 혜택 계산기
             </button>
+            <button
+              onClick={() => setActiveTab('admin')}
+              className={`py-3 px-6 font-semibold transition-colors ${
+                activeTab === 'admin'
+                  ? 'bg-white text-gray-800 border-b-2 border-gray-700'
+                  : 'text-gray-600 hover:text-gray-800'
+              }`}
+            >
+              ⚙️ 관리자
+            </button>
           </div>
         </div>
       </nav>
 
       <main className="max-w-7xl mx-auto px-4 py-6">
-        {activeTab === 'board' ? <PolicyBoard /> : <BenefitCalculator />}
+        {activeTab === 'board' && <PolicyBoard />}
+        {activeTab === 'calculator' && <BenefitCalculator />}
+        {activeTab === 'admin' && (
+          isAdmin ? (
+            <AdminDashboard onLogout={handleLogout} isAdmin={isAdmin} />
+          ) : (
+            <AdminLogin onLogin={handleLogin} />
+          )
+        )}
       </main>
 
       <footer className="bg-red-50 border-t-2 border-red-400 mt-12">
@@ -95,31 +109,6 @@ function App() {
           </div>
         </div>
       </footer>
-
-      {!isAdmin && (
-        <button
-          onClick={() => setShowAdminPanel(true)}
-          className="fixed bottom-6 right-6 bg-gray-700 hover:bg-gray-800 text-white font-semibold py-3 px-4 rounded-full shadow-lg transition-colors"
-          title="관리자 로그인"
-        >
-          🔐
-        </button>
-      )}
-
-      {!isAdmin && showAdminPanel && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 z-50">
-          <div className="absolute inset-0" onClick={() => setShowAdminPanel(false)} />
-          <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-full max-w-md">
-            <AdminLogin onLogin={handleLogin} />
-            <button
-              onClick={() => setShowAdminPanel(false)}
-              className="absolute top-4 right-4 text-gray-500 hover:text-gray-700"
-            >
-              ✕
-            </button>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

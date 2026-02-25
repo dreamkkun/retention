@@ -18,8 +18,8 @@ const AdminLogin = ({ onLogin }) => {
   };
 
   return (
-    <div className="min-h-screen bg-gray-100 flex items-center justify-center">
-      <div className="bg-white p-8 rounded border border-gray-300 shadow-sm w-full max-w-md">
+    <div className="max-w-md mx-auto mt-12">
+      <div className="bg-white border border-gray-300 p-8 shadow-sm">
         <h1 className="text-2xl font-bold text-gray-800 mb-6 text-center">
           🔐 관리자 로그인
         </h1>
@@ -67,10 +67,10 @@ const AdminLogin = ({ onLogin }) => {
           </button>
         </form>
 
-        <div className="mt-6 text-center text-sm text-gray-600">
-          <p>테스트 계정</p>
-          <p className="font-mono bg-gray-50 p-2 rounded mt-2">
-            ID: admin / PW: retention2026
+        <div className="mt-6 text-center text-sm text-gray-600 bg-gray-50 p-4 rounded border border-gray-300">
+          <p className="font-semibold mb-2">테스트 계정</p>
+          <p className="font-mono">
+            ID: <span className="font-bold">admin</span> / PW: <span className="font-bold">retention2026</span>
           </p>
         </div>
       </div>
