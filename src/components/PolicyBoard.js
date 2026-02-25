@@ -118,20 +118,31 @@ const PolicyBoard = () => {
             <thead>
               <tr className="bg-gray-100">
                 <th className="table-header">상품</th>
-                <th className="table-header">현재 요금</th>
-                <th className="table-header">상품권 혜택</th>
-                <th className="table-header">할인 혜택</th>
-                <th className="table-header">비고</th>
+                <th className="table-header">월 요금</th>
+                <th className="table-header">유지 혜택</th>
+                <th className="table-header">상향 혜택</th>
               </tr>
             </thead>
             <tbody>
-              {digitalData.products.map(product => (
+              {digitalData.main_products.map(product => (
                 <tr key={product.id}>
                   <td className="table-cell bg-gray-50 font-semibold">{product.name}</td>
-                  <td className="table-cell">{product.current_rate.toLocaleString()}원</td>
-                  <td className="table-cell font-bold">{product.gift_card}만원</td>
-                  <td className="table-cell">{product.discount > 0 ? `${product.discount}만원` : '-'}</td>
-                  <td className="table-cell text-xs text-gray-600">{product.notes || '-'}</td>
+                  <td className="table-cell">{product.monthly_fee}만원</td>
+                  <td className="table-cell">
+                    <div className="font-bold">{product.benefits.maintain.gift_card}만원</div>
+                    <div className="text-xs text-gray-600">할인 {product.benefits.maintain.discount}만원</div>
+                  </td>
+                  <td className="table-cell">
+                    <div className="font-bold">{product.benefits.upgrade.gift_card}만원</div>
+                    <div className="text-xs text-gray-600">할인 {product.benefits.upgrade.discount}만원</div>
+                  </td>
+                </tr>
+              ))}
+              {digitalData.sub_products.map(product => (
+                <tr key={product.id}>
+                  <td className="table-cell bg-gray-50 font-semibold">{product.name}</td>
+                  <td className="table-cell">{product.monthly_fee}만원</td>
+                  <td className="table-cell font-bold" colSpan="2">{product.gift_card}만원</td>
                 </tr>
               ))}
             </tbody>
