@@ -16,9 +16,10 @@
       "department": "고객유지팀",
       "employeeId": "005831",
       "status": "approved",
-      "role": "user",
+      "role": "admin",
       "created_at": "2026-02-25T19:46:23.735659",
-      "approved_at": "2026-02-25T19:47:08.521368"
+      "approved_at": "2026-02-25T19:47:08.521368",
+      "role_changed_at": "2026-02-25T19:50:30.870001"
     }
   ]
 }

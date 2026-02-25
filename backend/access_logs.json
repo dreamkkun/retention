@@ -10,5 +10,13 @@
     "user_id": "user_20260225194623",
     "user_name": "김혜영",
     "timestamp": "2026-02-25T19:47:08.523342"
+  },
+  {
+    "action": "USER_ROLE_CHANGED",
+    "user_id": "user_20260225194623",
+    "user_name": "김혜영",
+    "old_role": "user",
+    "new_role": "admin",
+    "timestamp": "2026-02-25T19:50:30.870837"
   }
 ]

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import API_URL from '../config';
 
 const UserManagement = () => {
   const [users, setUsers] = useState([]);
@@ -11,7 +12,7 @@ const UserManagement = () => {
 
   const fetchUsers = async () => {
     try {
-      const response = await fetch('http://localhost:5000/api/users/list');
+      const response = await fetch(`${API_URL}/api/users/list`);
       const data = await response.json();
       setUsers(data.users || []);
       setLoading(false);
@@ -25,7 +26,7 @@ const UserManagement = () => {
     if (!window.confirm('이 사용자를 승인하시겠습니까?')) return;
 
     try {
-      const response = await fetch(`http://localhost:5000/api/users/approve/${userId}`, {
+      const response = await fetch(`${API_URL}/api/users/approve/${userId}`, {
         method: 'POST'
       });
       const data = await response.json();
@@ -45,7 +46,7 @@ const UserManagement = () => {
     if (!window.confirm('이 신청을 거부하시겠습니까?')) return;
 
     try {
-      const response = await fetch(`http://localhost:5000/api/users/reject/${userId}`, {
+      const response = await fetch(`${API_URL}/api/users/reject/${userId}`, {
         method: 'POST'
       });
       const data = await response.json();
@@ -65,7 +66,7 @@ const UserManagement = () => {
     if (!window.confirm('정말 이 사용자를 삭제하시겠습니까?\n삭제 후에는 복구할 수 없습니다.')) return;
 
     try {
-      const response = await fetch(`http://localhost:5000/api/users/delete/${userId}`, {
+      const response = await fetch(`${API_URL}/api/users/delete/${userId}`, {
         method: 'DELETE'
       });
       const data = await response.json();
@@ -88,7 +89,7 @@ const UserManagement = () => {
     if (!window.confirm(`이 사용자를 ${roleText}로 변경하시겠습니까?`)) return;
 
     try {
-      const response = await fetch(`http://localhost:5000/api/users/change-role/${userId}`, {
+      const response = await fetch(`${API_URL}/api/users/change-role/${userId}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ role: newRole })

@@ -5,6 +5,7 @@ import AdminLogin from './components/AdminLogin';
 import AdminDashboard from './components/AdminDashboard';
 import SecurityWatermark from './components/SecurityWatermark';
 import SessionTimeout from './components/SessionTimeout';
+import API_URL from './config';
 
 function App() {
   const [activeTab, setActiveTab] = useState('board');
@@ -185,7 +186,7 @@ const LoginScreen = ({ onAuth }) => {
 
   const checkUserStatus = async (employeeId) => {
     try {
-      const response = await fetch('http://localhost:5000/api/users/check', {
+      const response = await fetch(`${API_URL}/api/users/check`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ employeeId })
@@ -203,7 +204,7 @@ const LoginScreen = ({ onAuth }) => {
     setError('');
 
     try {
-      const response = await fetch('http://localhost:5000/api/users/register', {
+      const response = await fetch(`${API_URL}/api/users/register`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name, department, employeeId })

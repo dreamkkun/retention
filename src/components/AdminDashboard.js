@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import * as XLSX from 'xlsx';
 import UserManagement from './UserManagement';
+import API_URL from '../config';
 
 const AdminDashboard = ({ onLogout, isAdmin = true }) => {
   const [uploadStatus, setUploadStatus] = useState(null);
@@ -11,7 +12,7 @@ const AdminDashboard = ({ onLogout, isAdmin = true }) => {
 
   // 백엔드 서버 상태 확인
   React.useEffect(() => {
-    fetch('http://localhost:5000/api/health')
+    fetch(`${API_URL}/api/health`)
       .then(response => response.json())
       .then(() => setBackendStatus('online'))
       .catch(() => setBackendStatus('offline'));
@@ -27,7 +28,7 @@ const AdminDashboard = ({ onLogout, isAdmin = true }) => {
     });
 
     // Flask 백엔드 API 호출
-    fetch('http://localhost:5000/api/upload-excel', {
+    fetch(`${API_URL}/api/upload-excel`, {
       method: 'POST',
       body: formData
     })
