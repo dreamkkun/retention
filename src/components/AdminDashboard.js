@@ -176,9 +176,10 @@ const AdminDashboard = ({ onLogout, isAdmin = true }) => {
           )}
         </div>
       </div>
-        <div className="grid md:grid-cols-2 gap-6">
-          {/* 정책 업로드 */}
-          <div className="card">
+
+      <div className="grid md:grid-cols-2 gap-6">
+        {/* 정책 업로드 */}
+        <div className="card">
             <h2 className="text-xl font-bold text-gray-800 mb-4">
               📤 정책 업로드
             </h2>
@@ -289,9 +290,10 @@ const AdminDashboard = ({ onLogout, isAdmin = true }) => {
             </div>
           </div>
         </div>
+      </div>
 
-        {/* 빠른 작업 */}
-        <div className="card mt-6">
+      {/* 빠른 작업 */}
+      <div className="card mt-6">
           <h2 className="text-xl font-bold text-gray-800 mb-4">
             ⚡ 빠른 작업
           </h2>
@@ -316,9 +318,10 @@ const AdminDashboard = ({ onLogout, isAdmin = true }) => {
             </button>
           </div>
         </div>
+      </div>
 
-        {/* 업데이트 가이드 */}
-        <div className="card mt-6">
+      {/* 업데이트 가이드 */}
+      <div className="card mt-6">
           <h2 className="text-xl font-bold text-gray-800 mb-4">
             📝 정책 업데이트 가이드
           </h2>
@@ -368,7 +371,7 @@ const AdminDashboard = ({ onLogout, isAdmin = true }) => {
             </div>
           </div>
         </div>
-      </main>
+      </div>
     </div>
   );
 };
