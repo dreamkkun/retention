@@ -72,8 +72,10 @@ curl http://localhost:5000/api/access-logs
 
 ## ⚠️ 주의사항
 
-1. **IP 화이트리스트 설정 필수**
-   - 프로덕션 환경에서는 반드시 사내 IP만 허용
+1. **IP 화이트리스트 설정 (배포 시)**
+   - 개발/테스트: `start-backend.bat` (모든 IP 허용)
+   - 프로덕션: `start-backend-production.bat` (IP 제한)
+   - `backend/app.py`의 `ALLOWED_IPS`에 사내 IP 대역 추가
 
 2. **접속 로그 정기 점검**
    - 비정상 접속 패턴 모니터링

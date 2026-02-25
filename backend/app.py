@@ -13,23 +13,28 @@ CORS(app)  # React 앱에서 접근 허용
 # 접속 로그 파일
 ACCESS_LOG_FILE = 'access_logs.json'
 
-# IP 화이트리스트 (사내 IP 대역 추가)
+# IP 화이트리스트 (배포 시 설정)
+# 환경 변수 ENABLE_IP_WHITELIST=true 설정 시 활성화
+ENABLE_IP_WHITELIST = os.getenv('ENABLE_IP_WHITELIST', 'false').lower() == 'true'
+
 ALLOWED_IPS = [
     '127.0.0.1',
     'localhost',
-    # '192.168.1.',  # 사내 IP 대역 예시 (주석 해제 후 사용)
-    # '10.0.0.',     # 사내 IP 대역 예시
+    # 배포 시 사내 IP 대역 추가
+    # '192.168.1.',
+    # '10.0.0.',
+    # '172.16.',
 ]
 
 def check_ip_whitelist(f):
     """IP 화이트리스트 확인 데코레이터"""
     @wraps(f)
     def decorated_function(*args, **kwargs):
-        client_ip = request.remote_addr
-        
-        # 개발 환경에서는 IP 체크 우회
-        if os.getenv('FLASK_ENV') == 'development':
+        # IP 체크가 비활성화되어 있으면 통과
+        if not ENABLE_IP_WHITELIST:
             return f(*args, **kwargs)
+        
+        client_ip = request.remote_addr
         
         # IP 화이트리스트 확인
         allowed = any(client_ip.startswith(ip) for ip in ALLOWED_IPS)
@@ -254,6 +259,13 @@ def get_access_logs():
 
 
 if __name__ == '__main__':
-    # 개발 환경 설정
-    os.environ['FLASK_ENV'] = 'development'
+    # 개발/테스트 환경 설정
+    # 배포 시에는 ENABLE_IP_WHITELIST=true 환경 변수 설정
+    print("=" * 50)
+    print("Flask 백엔드 서버 시작")
+    print("=" * 50)
+    print(f"IP 화이트리스트: {'활성화 ✓' if ENABLE_IP_WHITELIST else '비활성화 (개발 모드)'}")
+    print(f"서버 URL: http://localhost:5000")
+    print("=" * 50)
+    
     app.run(debug=True, port=5000, host='0.0.0.0')
