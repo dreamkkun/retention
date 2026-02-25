@@ -1,3 +1,7 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
 body {
   margin: 0;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
@@ -57,12 +61,12 @@ code {
 }
 
 /* 우클릭 방지 */
-body {
+body.production {
   -webkit-touch-callout: none;
 }
 
 /* 드래그 방지 */
-img {
+body.production img {
   -webkit-user-drag: none;
   -khtml-user-drag: none;
   -moz-user-drag: none;
