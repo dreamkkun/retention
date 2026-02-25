@@ -235,33 +235,7 @@ const AdminDashboard = ({ onLogout, isAdmin = true }) => {
       {/* 섹션 내용 */}
       {activeSection === 'upload' ? (
         <div>
-      <div className="bg-gray-100 border border-gray-300 p-4 mb-6">
-        <div className="flex justify-between items-center">
-          <div>
-            <h2 className="text-xl font-bold text-gray-800">⚙️ 관리자 대시보드</h2>
-            {backendStatus === 'online' && (
-              <p className="text-xs text-green-600 mt-1">
-                ✓ 백엔드 서버 연결됨 (DRM 엑셀 처리 가능)
-              </p>
-            )}
-            {backendStatus === 'offline' && (
-              <p className="text-xs text-red-600 mt-1">
-                ⚠️ 백엔드 서버 오프라인 (DRM 엑셀 처리 불가)
-              </p>
-            )}
-          </div>
-          {isAdmin && (
-            <button
-              onClick={onLogout}
-              className="bg-gray-200 hover:bg-gray-300 text-gray-800 font-semibold py-2 px-4 rounded transition-colors"
-            >
-              로그아웃
-            </button>
-          )}
-        </div>
-      </div>
-
-      <div className="grid md:grid-cols-2 gap-6">
+          <div className="grid md:grid-cols-2 gap-6">
         {/* 정책 업로드 */}
         <div className="card">
           <h2 className="text-xl font-bold text-gray-800 mb-4">
@@ -453,6 +427,7 @@ const AdminDashboard = ({ onLogout, isAdmin = true }) => {
           </div>
         </div>
       </div>
+        </div>
       ) : (
         <UserManagement />
       )}
