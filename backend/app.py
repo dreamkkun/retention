@@ -280,6 +280,57 @@ def delete_user(user_id):
         return jsonify({'error': str(e)}), 500
 
 
+@app.route('/api/users/change-role/<user_id>', methods=['POST'])
+def change_user_role(user_id):
+    """사용자 역할 변경 (관리자용)"""
+    try:
+        data = request.json
+        new_role = data.get('role')
+        
+        if new_role not in ['admin', 'user']:
+            return jsonify({'error': '유효하지 않은 역할입니다.'}), 400
+        
+        users_data = load_users()
+        
+        # 사용자 찾기
+        user_found = False
+        for user in users_data['users']:
+            if user['id'] == user_id:
+                user_found = True
+                old_role = user['role']
+                
+                # 초기 관리자 계정(000000)은 역할 변경 불가
+                if user.get('employeeId') == '000000':
+                    return jsonify({'error': '초기 관리자는 역할을 변경할 수 없습니다.'}), 400
+                
+                # 역할 변경
+                user['role'] = new_role
+                user['role_changed_at'] = datetime.now().isoformat()
+                
+                save_users(users_data)
+                
+                log_access({
+                    'action': 'USER_ROLE_CHANGED',
+                    'user_id': user_id,
+                    'user_name': user['name'],
+                    'old_role': old_role,
+                    'new_role': new_role,
+                    'timestamp': datetime.now().isoformat()
+                })
+                
+                return jsonify({
+                    'success': True,
+                    'message': f'사용자 역할이 {new_role}로 변경되었습니다.',
+                    'user': user
+                })
+        
+        if not user_found:
+            return jsonify({'error': '사용자를 찾을 수 없습니다.'}), 404
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
 # ========================================
 # 기존 API (엑셀 업로드 등)
 # ========================================

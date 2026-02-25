@@ -81,6 +81,31 @@ const UserManagement = () => {
     }
   };
 
+  const handleChangeRole = async (userId, currentRole) => {
+    const newRole = currentRole === 'admin' ? 'user' : 'admin';
+    const roleText = newRole === 'admin' ? '관리자' : '일반 사용자';
+    
+    if (!window.confirm(`이 사용자를 ${roleText}로 변경하시겠습니까?`)) return;
+
+    try {
+      const response = await fetch(`http://localhost:5000/api/users/change-role/${userId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ role: newRole })
+      });
+      const data = await response.json();
+
+      if (data.success) {
+        alert(data.message);
+        fetchUsers();
+      } else {
+        alert(data.error || '역할 변경 실패');
+      }
+    } catch (error) {
+      alert('역할 변경 중 오류가 발생했습니다.');
+    }
+  };
+
   const filteredUsers = users.filter(user => {
     if (filter === 'pending') return user.status === 'pending';
     if (filter === 'approved') return user.status === 'approved';
@@ -200,15 +225,33 @@ const UserManagement = () => {
                           거부
                         </button>
                       </div>
-                    ) : user.role !== 'admin' ? (
-                      <button
-                        onClick={() => handleDelete(user.id)}
-                        className="bg-gray-600 hover:bg-gray-700 text-white text-xs px-3 py-1 rounded transition-colors"
-                      >
-                        삭제
-                      </button>
                     ) : (
-                      <span className="text-xs text-gray-400">-</span>
+                      <div className="flex gap-2 justify-center">
+                        {user.employeeId !== '000000' && (
+                          <>
+                            <button
+                              onClick={() => handleChangeRole(user.id, user.role)}
+                              className={`text-xs px-3 py-1 rounded transition-colors ${
+                                user.role === 'admin'
+                                  ? 'bg-orange-600 hover:bg-orange-700 text-white'
+                                  : 'bg-purple-600 hover:bg-purple-700 text-white'
+                              }`}
+                              title={user.role === 'admin' ? '일반 사용자로 변경' : '관리자로 승격'}
+                            >
+                              {user.role === 'admin' ? '↓ 일반' : '↑ 관리자'}
+                            </button>
+                            <button
+                              onClick={() => handleDelete(user.id)}
+                              className="bg-gray-600 hover:bg-gray-700 text-white text-xs px-3 py-1 rounded transition-colors"
+                            >
+                              삭제
+                            </button>
+                          </>
+                        )}
+                        {user.employeeId === '000000' && (
+                          <span className="text-xs text-gray-400 font-semibold">시스템 관리자</span>
+                        )}
+                      </div>
                     )}
                   </td>
                 </tr>
@@ -224,8 +267,9 @@ const UserManagement = () => {
         <ul className="text-sm text-blue-800 space-y-1">
           <li>• 신규 사용자가 신청하면 "승인 대기" 상태로 등록됩니다.</li>
           <li>• 관리자가 승인해야 시스템 접속이 가능합니다.</li>
-          <li>• 승인된 사용자는 언제든지 삭제할 수 있습니다.</li>
-          <li>• 관리자 계정은 삭제할 수 없습니다.</li>
+          <li>• 승인된 사용자는 언제든지 역할을 변경하거나 삭제할 수 있습니다.</li>
+          <li>• 관리자로 승격하면 정책 업데이트 및 사용자 관리 권한이 부여됩니다.</li>
+          <li>• 초기 시스템 관리자(000000)는 역할 변경 및 삭제가 불가능합니다.</li>
         </ul>
       </div>
     </div>

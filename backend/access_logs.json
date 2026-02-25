@@ -1,0 +1,14 @@
+[
+  {
+    "action": "USER_REGISTER",
+    "user": "김혜영",
+    "employee_id": "005831",
+    "timestamp": "2026-02-25T19:46:23.736713"
+  },
+  {
+    "action": "USER_APPROVED",
+    "user_id": "user_20260225194623",
+    "user_name": "김혜영",
+    "timestamp": "2026-02-25T19:47:08.523342"
+  }
+]
