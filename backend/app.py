@@ -4,13 +4,83 @@ import xlwings as xw
 import os
 import tempfile
 import json
+from datetime import datetime
+from functools import wraps
 
 app = Flask(__name__)
 CORS(app)  # React 앱에서 접근 허용
 
+# 접속 로그 파일
+ACCESS_LOG_FILE = 'access_logs.json'
+
+# IP 화이트리스트 (사내 IP 대역 추가)
+ALLOWED_IPS = [
+    '127.0.0.1',
+    'localhost',
+    # '192.168.1.',  # 사내 IP 대역 예시 (주석 해제 후 사용)
+    # '10.0.0.',     # 사내 IP 대역 예시
+]
+
+def check_ip_whitelist(f):
+    """IP 화이트리스트 확인 데코레이터"""
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        client_ip = request.remote_addr
+        
+        # 개발 환경에서는 IP 체크 우회
+        if os.getenv('FLASK_ENV') == 'development':
+            return f(*args, **kwargs)
+        
+        # IP 화이트리스트 확인
+        allowed = any(client_ip.startswith(ip) for ip in ALLOWED_IPS)
+        
+        if not allowed:
+            log_access({
+                'ip': client_ip,
+                'action': 'BLOCKED',
+                'reason': 'IP not in whitelist',
+                'timestamp': datetime.now().isoformat()
+            })
+            return jsonify({'error': '접근이 차단되었습니다. 사내망에서 접속해주세요.'}), 403
+        
+        return f(*args, **kwargs)
+    return decorated_function
+
+
+def log_access(log_data):
+    """접속 로그 기록"""
+    try:
+        if os.path.exists(ACCESS_LOG_FILE):
+            with open(ACCESS_LOG_FILE, 'r', encoding='utf-8') as f:
+                logs = json.load(f)
+        else:
+            logs = []
+        
+        logs.append(log_data)
+        
+        # 최근 1000개만 보관
+        logs = logs[-1000:]
+        
+        with open(ACCESS_LOG_FILE, 'w', encoding='utf-8') as f:
+            json.dump(logs, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        print(f"Log write error: {e}")
+
+
 @app.route('/api/upload-excel', methods=['POST'])
+@check_ip_whitelist
 def upload_excel():
     """DRM이 걸린 엑셀 파일을 xlwings로 읽어서 JSON으로 변환"""
+    
+    client_ip = request.remote_addr
+    user_agent = request.headers.get('User-Agent', 'Unknown')
+    
+    log_access({
+        'ip': client_ip,
+        'action': 'UPLOAD_EXCEL',
+        'user_agent': user_agent,
+        'timestamp': datetime.now().isoformat()
+    })
     
     if 'file' not in request.files:
         return jsonify({'error': '파일이 없습니다.'}), 400
@@ -43,6 +113,13 @@ def upload_excel():
         # 임시 파일 삭제
         os.unlink(temp_path)
         
+        log_access({
+            'ip': client_ip,
+            'action': 'EXCEL_PROCESSED',
+            'filename': file.filename,
+            'timestamp': datetime.now().isoformat()
+        })
+        
         return jsonify({
             'success': True,
             'data': policy_data,
@@ -50,6 +127,12 @@ def upload_excel():
         })
         
     except Exception as e:
+        log_access({
+            'ip': client_ip,
+            'action': 'ERROR',
+            'error': str(e),
+            'timestamp': datetime.now().isoformat()
+        })
         return jsonify({
             'error': f'파일 처리 중 오류 발생: {str(e)}'
         }), 500
@@ -147,8 +230,30 @@ def parse_policy_excel(wb):
 @app.route('/api/health', methods=['GET'])
 def health_check():
     """서버 상태 확인"""
+    client_ip = request.remote_addr
+    log_access({
+        'ip': client_ip,
+        'action': 'HEALTH_CHECK',
+        'timestamp': datetime.now().isoformat()
+    })
     return jsonify({'status': 'ok', 'message': 'Flask server is running'})
 
 
+@app.route('/api/access-logs', methods=['GET'])
+@check_ip_whitelist
+def get_access_logs():
+    """접속 로그 조회 (관리자용)"""
+    try:
+        if os.path.exists(ACCESS_LOG_FILE):
+            with open(ACCESS_LOG_FILE, 'r', encoding='utf-8') as f:
+                logs = json.load(f)
+            return jsonify({'logs': logs[-100:]})  # 최근 100개
+        return jsonify({'logs': []})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
 if __name__ == '__main__':
+    # 개발 환경 설정
+    os.environ['FLASK_ENV'] = 'development'
     app.run(debug=True, port=5000, host='0.0.0.0')

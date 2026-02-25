@@ -3,15 +3,75 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="theme-color" content="#2563eb" />
-    <meta
-      name="description"
-      content="리텐션 정책 지원 시스템"
-    />
-    <title>리텐션 정책 지원 시스템</title>
+    <meta name="theme-color" content="#dc2626" />
+    <meta name="description" content="[대외비] 리텐션 정책 지원 시스템" />
+    
+    <!-- 보안 메타 태그 -->
+    <meta name="robots" content="noindex, nofollow" />
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+    <meta http-equiv="Pragma" content="no-cache" />
+    <meta http-equiv="Expires" content="0" />
+    
+    <!-- 우클릭/드래그 방지 -->
+    <meta name="format-detection" content="telephone=no" />
+    
+    <title>[대외비] 리텐션 정책 지원 시스템</title>
+    
+    <script>
+      // 개발자 도구 열림 감지
+      (function() {
+        const devtools = /./;
+        devtools.toString = function() {
+          this.opened = true;
+        }
+        
+        setInterval(function() {
+          console.log(devtools);
+          console.clear();
+          if (devtools.opened) {
+            alert('보안상의 이유로 개발자 도구 사용이 제한됩니다.');
+            devtools.opened = false;
+          }
+        }, 1000);
+      })();
+      
+      // 우클릭 방지
+      document.addEventListener('contextmenu', function(e) {
+        e.preventDefault();
+        return false;
+      });
+      
+      // 특정 키 조합 방지 (F12, Ctrl+Shift+I, Ctrl+U 등)
+      document.addEventListener('keydown', function(e) {
+        if (
+          e.key === 'F12' ||
+          (e.ctrlKey && e.shiftKey && e.key === 'I') ||
+          (e.ctrlKey && e.shiftKey && e.key === 'J') ||
+          (e.ctrlKey && e.key === 'U') ||
+          (e.ctrlKey && e.key === 'S')
+        ) {
+          e.preventDefault();
+          alert('이 기능은 보안상의 이유로 비활성화되어 있습니다.');
+          return false;
+        }
+      });
+      
+      // 화면 캡처 감지 (실험적)
+      document.addEventListener('keyup', function(e) {
+        if (e.key === 'PrintScreen') {
+          navigator.clipboard.writeText('');
+          alert('⚠️ 화면 캡처가 감지되었습니다.\n대외비 문서의 무단 복제는 금지되어 있습니다.');
+        }
+      });
+    </script>
   </head>
   <body>
-    <noscript>You need to enable JavaScript to run this app.</noscript>
+    <noscript>
+      <div style="padding: 20px; text-align: center; color: red;">
+        <h1>⚠️ JavaScript가 비활성화되어 있습니다.</h1>
+        <p>이 시스템을 사용하려면 JavaScript를 활성화해주세요.</p>
+      </div>
+    </noscript>
     <div id="root"></div>
   </body>
 </html>
