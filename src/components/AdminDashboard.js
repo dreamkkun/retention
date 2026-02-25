@@ -303,12 +303,12 @@ const AdminDashboard = ({ onLogout, isAdmin = true }) => {
 
           {/* 템플릿 다운로드 */}
           <div className="card">
-              <h2 className="text-xl font-bold text-gray-800 mb-4">
+            <h2 className="text-xl font-bold text-gray-800 mb-4">
               📥 템플릿 다운로드
             </h2>
 
             <div className="space-y-4">
-                <div className="bg-gray-50 border border-gray-300 p-4 rounded">
+              <div className="bg-gray-50 border border-gray-300 p-4 rounded">
                 <h3 className="font-semibold text-gray-800 mb-2">📊 엑셀 템플릿</h3>
                 <p className="text-sm text-gray-600 mb-4">
                   정책 데이터를 입력할 수 있는 5개 시트로 구성된 엑셀 템플릿입니다.
