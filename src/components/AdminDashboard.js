@@ -5,43 +5,60 @@ const AdminDashboard = ({ onLogout, isAdmin = true }) => {
   const [uploadStatus, setUploadStatus] = useState(null);
   const [selectedFile, setSelectedFile] = useState(null);
   const [uploadType, setUploadType] = useState('excel'); // 'excel' or 'image'
+  const [backendStatus, setBackendStatus] = useState('checking'); // 'checking', 'online', 'offline'
+
+  // 백엔드 서버 상태 확인
+  React.useEffect(() => {
+    fetch('http://localhost:5000/api/health')
+      .then(response => response.json())
+      .then(() => setBackendStatus('online'))
+      .catch(() => setBackendStatus('offline'));
+  }, []);
 
   const handleExcelUpload = (file) => {
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      try {
-        const data = new Uint8Array(e.target.result);
-        const workbook = XLSX.read(data, { type: 'array' });
-        
-        // 엑셀 데이터를 JSON으로 변환
-        const sheetName = workbook.SheetNames[0];
-        const worksheet = workbook.Sheets[sheetName];
-        const jsonData = XLSX.utils.sheet_to_json(worksheet);
-        
-        console.log('Excel data:', jsonData);
-        
-        // JSON 파일 다운로드
-        const dataStr = JSON.stringify(jsonData, null, 2);
-        const dataUri = 'data:application/json;charset=utf-8,' + encodeURIComponent(dataStr);
-        const exportFileDefaultName = `policy_update_${new Date().toISOString().split('T')[0]}.json`;
-        
-        const linkElement = document.createElement('a');
-        linkElement.setAttribute('href', dataUri);
-        linkElement.setAttribute('download', exportFileDefaultName);
-        linkElement.click();
-        
-        setUploadStatus({
-          type: 'success',
-          message: `엑셀 파일이 성공적으로 업로드되었습니다. JSON 파일이 다운로드되었습니다.`
-        });
-      } catch (error) {
+    const formData = new FormData();
+    formData.append('file', file);
+
+    setUploadStatus({
+      type: 'info',
+      message: '파일을 업로드 중입니다...'
+    });
+
+    // Flask 백엔드 API 호출
+    fetch('http://localhost:5000/api/upload-excel', {
+      method: 'POST',
+      body: formData
+    })
+      .then(response => response.json())
+      .then(data => {
+        if (data.success) {
+          // JSON 파일 다운로드
+          const dataStr = JSON.stringify(data.data, null, 2);
+          const dataUri = 'data:application/json;charset=utf-8,' + encodeURIComponent(dataStr);
+          const exportFileDefaultName = `policy_update_${new Date().toISOString().split('T')[0]}.json`;
+          
+          const linkElement = document.createElement('a');
+          linkElement.setAttribute('href', dataUri);
+          linkElement.setAttribute('download', exportFileDefaultName);
+          linkElement.click();
+          
+          setUploadStatus({
+            type: 'success',
+            message: `✅ DRM 엑셀 파일이 성공적으로 처리되었습니다!\n\nJSON 파일이 다운로드되었습니다.\n이 파일을 src/data/policies.json에 복사하세요.`
+          });
+        } else {
+          setUploadStatus({
+            type: 'error',
+            message: `오류: ${data.error || '알 수 없는 오류'}`
+          });
+        }
+      })
+      .catch(error => {
         setUploadStatus({
           type: 'error',
-          message: `오류 발생: ${error.message}`
+          message: `서버 연결 실패: ${error.message}\n\n백엔드 서버가 실행 중인지 확인하세요.\n(backend 폴더에서 python app.py 실행)`
         });
-      }
-    };
-    reader.readAsArrayBuffer(file);
+      });
   };
 
   const handleImageUpload = (file) => {
@@ -165,7 +182,19 @@ const AdminDashboard = ({ onLogout, isAdmin = true }) => {
     <div>
       <div className="bg-gray-100 border border-gray-300 p-4 mb-6">
         <div className="flex justify-between items-center">
-          <h2 className="text-xl font-bold text-gray-800">⚙️ 관리자 대시보드</h2>
+          <div>
+            <h2 className="text-xl font-bold text-gray-800">⚙️ 관리자 대시보드</h2>
+            {backendStatus === 'online' && (
+              <p className="text-xs text-green-600 mt-1">
+                ✓ 백엔드 서버 연결됨 (DRM 엑셀 처리 가능)
+              </p>
+            )}
+            {backendStatus === 'offline' && (
+              <p className="text-xs text-red-600 mt-1">
+                ⚠️ 백엔드 서버 오프라인 (DRM 엑셀 처리 불가)
+              </p>
+            )}
+          </div>
           {isAdmin && (
             <button
               onClick={onLogout}
