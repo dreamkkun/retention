@@ -13,7 +13,7 @@
 ```python
 ALLOWED_IPS = [
     '127.0.0.1',
-    'localhost',
+    'http://localhost:3000/',
     '192.168.1.',    # 사내 IP 대역
     '10.0.0.',       # 사내 IP 대역
     '172.16.0.',     # 사내 IP 대역

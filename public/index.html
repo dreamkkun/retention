@@ -18,51 +18,59 @@
     <title>[대외비] 리텐션 정책 지원 시스템</title>
     
     <script>
-      // 개발자 도구 열림 감지
-      (function() {
-        const devtools = /./;
-        devtools.toString = function() {
-          this.opened = true;
-        }
-        
-        setInterval(function() {
-          console.log(devtools);
-          console.clear();
-          if (devtools.opened) {
-            alert('보안상의 이유로 개발자 도구 사용이 제한됩니다.');
-            devtools.opened = false;
+      // 프로덕션 환경에서만 보안 기능 활성화
+      const isProduction = window.location.hostname !== 'localhost' && 
+                          window.location.hostname !== '127.0.0.1';
+      
+      if (isProduction) {
+        // 개발자 도구 열림 감지 (프로덕션만)
+        (function() {
+          const devtools = /./;
+          devtools.toString = function() {
+            this.opened = true;
           }
-        }, 1000);
-      })();
-      
-      // 우클릭 방지
-      document.addEventListener('contextmenu', function(e) {
-        e.preventDefault();
-        return false;
-      });
-      
-      // 특정 키 조합 방지 (F12, Ctrl+Shift+I, Ctrl+U 등)
-      document.addEventListener('keydown', function(e) {
-        if (
-          e.key === 'F12' ||
-          (e.ctrlKey && e.shiftKey && e.key === 'I') ||
-          (e.ctrlKey && e.shiftKey && e.key === 'J') ||
-          (e.ctrlKey && e.key === 'U') ||
-          (e.ctrlKey && e.key === 'S')
-        ) {
+          
+          setInterval(function() {
+            console.log(devtools);
+            console.clear();
+            if (devtools.opened) {
+              alert('보안상의 이유로 개발자 도구 사용이 제한됩니다.');
+              devtools.opened = false;
+            }
+          }, 1000);
+        })();
+        
+        // 우클릭 방지
+        document.addEventListener('contextmenu', function(e) {
           e.preventDefault();
-          alert('이 기능은 보안상의 이유로 비활성화되어 있습니다.');
           return false;
-        }
-      });
-      
-      // 화면 캡처 감지 (실험적)
-      document.addEventListener('keyup', function(e) {
-        if (e.key === 'PrintScreen') {
-          navigator.clipboard.writeText('');
-          alert('⚠️ 화면 캡처가 감지되었습니다.\n대외비 문서의 무단 복제는 금지되어 있습니다.');
-        }
-      });
+        });
+        
+        // 특정 키 조합 방지 (F12, Ctrl+Shift+I, Ctrl+U 등)
+        document.addEventListener('keydown', function(e) {
+          if (
+            e.key === 'F12' ||
+            (e.ctrlKey && e.shiftKey && e.key === 'I') ||
+            (e.ctrlKey && e.shiftKey && e.key === 'J') ||
+            (e.ctrlKey && e.key === 'U') ||
+            (e.ctrlKey && e.key === 'S')
+          ) {
+            e.preventDefault();
+            alert('이 기능은 보안상의 이유로 비활성화되어 있습니다.');
+            return false;
+          }
+        });
+        
+        // 화면 캡처 감지
+        document.addEventListener('keyup', function(e) {
+          if (e.key === 'PrintScreen') {
+            navigator.clipboard.writeText('');
+            alert('⚠️ 화면 캡처가 감지되었습니다.\n대외비 문서의 무단 복제는 금지되어 있습니다.');
+          }
+        });
+      } else {
+        console.log('🔓 개발 모드: 보안 제약 비활성화');
+      }
     </script>
   </head>
   <body>
