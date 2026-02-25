@@ -10,23 +10,51 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   background-color: #ffffff;
-}
-
-/* 개발 모드에서는 선택 가능 */
-body.production {
-  /* 복사 방지 */
+  
+  /* 텍스트 선택 방지 */
   -webkit-user-select: none;
   -moz-user-select: none;
   -ms-user-select: none;
   user-select: none;
+  
+  /* 드래그 방지 */
+  -webkit-user-drag: none;
+  -khtml-user-drag: none;
+  -moz-user-drag: none;
+  -o-user-drag: none;
+  user-drag: none;
 }
 
-/* 입력 필드는 항상 선택 가능 */
-input, textarea, [contenteditable] {
+/* 입력 필드만 선택 가능 */
+input, 
+textarea, 
+[contenteditable],
+input[type="text"],
+input[type="number"],
+input[type="email"],
+input[type="password"],
+select {
   -webkit-user-select: text !important;
   -moz-user-select: text !important;
   -ms-user-select: text !important;
   user-select: text !important;
+}
+
+/* 모든 요소 드래그 방지 */
+* {
+  -webkit-user-drag: none;
+  -khtml-user-drag: none;
+  -moz-user-drag: none;
+  -o-user-drag: none;
+  user-drag: none;
+}
+
+/* 이미지 드래그 방지 */
+img {
+  pointer-events: none;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  user-select: none;
 }
 
 code {
@@ -61,17 +89,8 @@ code {
 }
 
 /* 우클릭 방지 */
-body.production {
+body {
   -webkit-touch-callout: none;
-}
-
-/* 드래그 방지 */
-body.production img {
-  -webkit-user-drag: none;
-  -khtml-user-drag: none;
-  -moz-user-drag: none;
-  -o-user-drag: none;
-  user-drag: none;
 }
 
 /* 인쇄 시 워터마크 추가 */
