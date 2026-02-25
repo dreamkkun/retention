@@ -110,44 +110,40 @@ const PolicyBoard = () => {
     const digitalData = policiesData.digital_renewal;
 
     return (
-      <div className="mb-8">
-        <h3 className="text-lg font-bold text-gray-800 mb-3">디지털 재약정 정책</h3>
-        
-        <div className="overflow-x-auto">
-          <table className="w-full border-collapse border border-gray-400">
-            <thead>
-              <tr className="bg-gray-100">
-                <th className="table-header">상품</th>
-                <th className="table-header">월 요금</th>
-                <th className="table-header">유지 혜택</th>
-                <th className="table-header">상향 혜택</th>
+      <div className="overflow-x-auto">
+        <table className="w-full border-collapse border border-gray-400">
+          <thead>
+            <tr className="bg-gray-100">
+              <th className="table-header">상품</th>
+              <th className="table-header">월 요금</th>
+              <th className="table-header">유지 혜택</th>
+              <th className="table-header">상향 혜택</th>
+            </tr>
+          </thead>
+          <tbody>
+            {digitalData.main_products.map(product => (
+              <tr key={product.id}>
+                <td className="table-cell bg-gray-50 font-semibold">{product.name}</td>
+                <td className="table-cell">{product.monthly_fee}만원</td>
+                <td className="table-cell">
+                  <div className="font-bold">{product.benefits.maintain.gift_card}만원</div>
+                  <div className="text-xs text-gray-600">할인 {product.benefits.maintain.discount}만원</div>
+                </td>
+                <td className="table-cell">
+                  <div className="font-bold">{product.benefits.upgrade.gift_card}만원</div>
+                  <div className="text-xs text-gray-600">할인 {product.benefits.upgrade.discount}만원</div>
+                </td>
               </tr>
-            </thead>
-            <tbody>
-              {digitalData.main_products.map(product => (
-                <tr key={product.id}>
-                  <td className="table-cell bg-gray-50 font-semibold">{product.name}</td>
-                  <td className="table-cell">{product.monthly_fee}만원</td>
-                  <td className="table-cell">
-                    <div className="font-bold">{product.benefits.maintain.gift_card}만원</div>
-                    <div className="text-xs text-gray-600">할인 {product.benefits.maintain.discount}만원</div>
-                  </td>
-                  <td className="table-cell">
-                    <div className="font-bold">{product.benefits.upgrade.gift_card}만원</div>
-                    <div className="text-xs text-gray-600">할인 {product.benefits.upgrade.discount}만원</div>
-                  </td>
-                </tr>
-              ))}
-              {digitalData.sub_products.map(product => (
-                <tr key={product.id}>
-                  <td className="table-cell bg-gray-50 font-semibold">{product.name}</td>
-                  <td className="table-cell">{product.monthly_fee}만원</td>
-                  <td className="table-cell font-bold" colSpan="2">{product.gift_card}만원</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+            ))}
+            {digitalData.sub_products.map(product => (
+              <tr key={product.id}>
+                <td className="table-cell bg-gray-50 font-semibold">{product.name}</td>
+                <td className="table-cell">{product.monthly_fee}만원</td>
+                <td className="table-cell font-bold" colSpan="2">{product.gift_card}만원</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
     );
   };
@@ -261,8 +257,21 @@ const PolicyBoard = () => {
       </div>
 
       <div className="bg-white">
-        {(activeFilter === 'all' || activeFilter === 'bundle') && renderBundleRetentionMatrix()}
-        {(activeFilter === 'all' || activeFilter === 'digital') && renderDigitalRenewal()}
+        {(activeFilter === 'all' || activeFilter === 'bundle') && (
+          <>
+            {renderBundleRetentionMatrix()}
+            <div className="mb-8">
+              <h3 className="text-lg font-bold text-gray-800 mb-3">디지털(TV) 혜택 (번들 고객용)</h3>
+              {renderDigitalRenewal()}
+            </div>
+          </>
+        )}
+        {(activeFilter === 'all' || activeFilter === 'digital') && (
+          <div className="mb-8">
+            <h3 className="text-lg font-bold text-gray-800 mb-3">디지털 재약정 정책</h3>
+            {renderDigitalRenewal()}
+          </div>
+        )}
         {(activeFilter === 'all' || activeFilter === 'equal_bundle') && renderEqualBundle()}
         {(activeFilter === 'all' || activeFilter === 'd_standalone') && renderDStandalone()}
       </div>
