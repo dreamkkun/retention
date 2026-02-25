@@ -180,8 +180,53 @@ const LoginScreen = ({ onAuth }) => {
   const [department, setDepartment] = useState('');
   const [employeeId, setEmployeeId] = useState('');
   const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [registering, setRegistering] = useState(false);
 
-  const handleSubmit = (e) => {
+  const checkUserStatus = async (employeeId) => {
+    try {
+      const response = await fetch('http://localhost:5000/api/users/check', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ employeeId })
+      });
+      const data = await response.json();
+      return data;
+    } catch (error) {
+      console.error('사용자 확인 실패:', error);
+      return { exists: false };
+    }
+  };
+
+  const registerUser = async () => {
+    setLoading(true);
+    setError('');
+
+    try {
+      const response = await fetch('http://localhost:5000/api/users/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, department, employeeId })
+      });
+      const data = await response.json();
+
+      if (data.success) {
+        alert('✅ 등록 신청이 완료되었습니다!\n\n관리자 승인 후 이용 가능합니다.\n승인 완료 시 사번으로 다시 로그인해주세요.');
+        setName('');
+        setDepartment('');
+        setEmployeeId('');
+        setRegistering(false);
+      } else {
+        setError(data.error || '등록 실패');
+      }
+    } catch (error) {
+      setError('등록 중 오류가 발생했습니다.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSubmit = async (e) => {
     e.preventDefault();
     
     if (!name || !department || !employeeId) {
@@ -189,14 +234,102 @@ const LoginScreen = ({ onAuth }) => {
       return;
     }
 
-    // 사번 형식 확인 (예: 6자리 숫자)
+    // 사번 형식 확인 (6자리 숫자)
     if (!/^\d{6}$/.test(employeeId)) {
       setError('올바른 사번 형식이 아닙니다. (6자리 숫자)');
       return;
     }
 
-    onAuth({ name, department, employeeId });
+    setLoading(true);
+    setError('');
+
+    // 사용자 상태 확인
+    const userStatus = await checkUserStatus(employeeId);
+
+    if (userStatus.exists) {
+      if (userStatus.status === 'approved') {
+        // 승인된 사용자 - 로그인 허용
+        onAuth({ 
+          name: userStatus.user.name, 
+          department: userStatus.user.department, 
+          employeeId: userStatus.user.employeeId,
+          role: userStatus.user.role
+        });
+      } else if (userStatus.status === 'pending') {
+        // 승인 대기 중
+        setError('승인 대기 중입니다. 관리자 승인을 기다려주세요.');
+        setLoading(false);
+      }
+    } else {
+      // 미등록 사용자 - 등록 화면으로 전환
+      setRegistering(true);
+      setLoading(false);
+    }
   };
+
+  if (registering) {
+    return (
+      <div className="min-h-screen bg-gray-100 flex items-center justify-center">
+        <div className="bg-white p-8 rounded border border-gray-300 shadow-lg w-full max-w-md">
+          <div className="text-center mb-6">
+            <div className="text-4xl mb-4">📝</div>
+            <h1 className="text-2xl font-bold text-gray-800">
+              신규 사용자 등록
+            </h1>
+            <p className="text-gray-600 mt-2 text-sm">
+              등록 후 관리자 승인이 필요합니다
+            </p>
+          </div>
+
+          <div className="bg-blue-50 border border-blue-300 p-3 rounded mb-4">
+            <p className="text-xs text-blue-800">
+              ℹ️ 입력하신 정보로 등록 신청합니다.<br/>
+              관리자 승인 후 시스템을 이용하실 수 있습니다.
+            </p>
+          </div>
+
+          <div className="space-y-4">
+            <div className="bg-gray-50 border border-gray-300 p-3 rounded">
+              <div className="text-sm text-gray-600 mb-1">이름</div>
+              <div className="font-semibold text-gray-800">{name}</div>
+            </div>
+
+            <div className="bg-gray-50 border border-gray-300 p-3 rounded">
+              <div className="text-sm text-gray-600 mb-1">부서</div>
+              <div className="font-semibold text-gray-800">{department}</div>
+            </div>
+
+            <div className="bg-gray-50 border border-gray-300 p-3 rounded">
+              <div className="text-sm text-gray-600 mb-1">사번</div>
+              <div className="font-semibold text-gray-800 font-mono">{employeeId}</div>
+            </div>
+
+            {error && (
+              <div className="bg-red-50 border border-red-300 text-red-700 px-4 py-3 rounded">
+                {error}
+              </div>
+            )}
+
+            <button
+              onClick={registerUser}
+              disabled={loading}
+              className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white font-semibold py-3 rounded transition-colors"
+            >
+              {loading ? '등록 중...' : '등록 신청하기'}
+            </button>
+
+            <button
+              onClick={() => setRegistering(false)}
+              disabled={loading}
+              className="w-full bg-gray-200 hover:bg-gray-300 text-gray-800 font-semibold py-2 rounded transition-colors"
+            >
+              취소
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-100 flex items-center justify-center">
@@ -268,15 +401,23 @@ const LoginScreen = ({ onAuth }) => {
 
           <button
             type="submit"
-            className="w-full bg-gray-700 hover:bg-gray-800 text-white font-semibold py-3 rounded transition-colors"
+            disabled={loading}
+            className="w-full bg-gray-700 hover:bg-gray-800 disabled:bg-gray-400 text-white font-semibold py-3 rounded transition-colors"
           >
-            접속하기
+            {loading ? '확인 중...' : '접속하기'}
           </button>
         </form>
 
         <div className="mt-6 text-center text-xs text-gray-600">
-          <p>본 시스템의 모든 정보는 대외비로 관리됩니다.</p>
-          <p className="mt-1">접속 기록이 저장되며 관리자가 모니터링합니다.</p>
+          <p>등록되지 않은 사용자는 자동으로 등록 화면으로 이동합니다.</p>
+          <p className="mt-1">관리자 승인 후 시스템을 이용할 수 있습니다.</p>
+        </div>
+
+        <div className="mt-4 bg-gray-50 border border-gray-300 p-3 rounded">
+          <p className="text-xs text-gray-600 text-center">
+            <strong>관리자 초기 계정</strong><br/>
+            사번: 000000 (6개의 0)
+          </p>
         </div>
       </div>
     </div>

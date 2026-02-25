@@ -1,11 +1,13 @@
 import React, { useState } from 'react';
 import * as XLSX from 'xlsx';
+import UserManagement from './UserManagement';
 
 const AdminDashboard = ({ onLogout, isAdmin = true }) => {
   const [uploadStatus, setUploadStatus] = useState(null);
   const [selectedFile, setSelectedFile] = useState(null);
   const [uploadType, setUploadType] = useState('excel'); // 'excel' or 'image'
   const [backendStatus, setBackendStatus] = useState('checking'); // 'checking', 'online', 'offline'
+  const [activeSection, setActiveSection] = useState('upload'); // 'upload', 'users'
 
   // 백엔드 서버 상태 확인
   React.useEffect(() => {
@@ -180,6 +182,59 @@ const AdminDashboard = ({ onLogout, isAdmin = true }) => {
 
   return (
     <div>
+      <div className="bg-gray-100 border border-gray-300 p-4 mb-6">
+        <div className="flex justify-between items-center">
+          <div>
+            <h2 className="text-xl font-bold text-gray-800">⚙️ 관리자 대시보드</h2>
+            {backendStatus === 'online' && (
+              <p className="text-xs text-green-600 mt-1">
+                ✓ 백엔드 서버 연결됨 (DRM 엑셀 처리 가능)
+              </p>
+            )}
+            {backendStatus === 'offline' && (
+              <p className="text-xs text-red-600 mt-1">
+                ⚠️ 백엔드 서버 오프라인 (DRM 엑셀 처리 불가)
+              </p>
+            )}
+          </div>
+          {isAdmin && (
+            <button
+              onClick={onLogout}
+              className="bg-gray-200 hover:bg-gray-300 text-gray-800 font-semibold py-2 px-4 rounded transition-colors"
+            >
+              로그아웃
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* 섹션 선택 탭 */}
+      <div className="flex gap-2 mb-6 border-b border-gray-300">
+        <button
+          onClick={() => setActiveSection('upload')}
+          className={`py-3 px-6 font-semibold transition-colors ${
+            activeSection === 'upload'
+              ? 'bg-white text-gray-800 border-b-2 border-gray-700'
+              : 'text-gray-600 hover:text-gray-800'
+          }`}
+        >
+          📤 정책 업로드
+        </button>
+        <button
+          onClick={() => setActiveSection('users')}
+          className={`py-3 px-6 font-semibold transition-colors ${
+            activeSection === 'users'
+              ? 'bg-white text-gray-800 border-b-2 border-gray-700'
+              : 'text-gray-600 hover:text-gray-800'
+          }`}
+        >
+          👥 사용자 관리
+        </button>
+      </div>
+
+      {/* 섹션 내용 */}
+      {activeSection === 'upload' ? (
+        <div>
       <div className="bg-gray-100 border border-gray-300 p-4 mb-6">
         <div className="flex justify-between items-center">
           <div>
@@ -398,6 +453,9 @@ const AdminDashboard = ({ onLogout, isAdmin = true }) => {
           </div>
         </div>
       </div>
+      ) : (
+        <UserManagement />
+      )}
     </div>
   );
 };
