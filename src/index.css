@@ -9,7 +9,7 @@ body {
     sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  background-color: #f8fafc;
+  background-color: #ffffff;
 }
 
 code {
@@ -18,23 +18,27 @@ code {
 }
 
 @layer components {
-  .table-highlight-blue {
-    @apply bg-blue-50 border-2 border-blue-400;
-  }
-  
-  .table-highlight-red {
-    @apply bg-red-50 border-2 border-red-400;
-  }
-  
   .card {
-    @apply bg-white rounded-lg shadow-md p-6;
+    @apply bg-white rounded border border-gray-300 p-6 shadow-sm;
   }
   
   .btn-primary {
-    @apply bg-primary-600 hover:bg-primary-700 text-white font-semibold py-2 px-4 rounded-lg transition-colors;
+    @apply bg-gray-700 hover:bg-gray-800 text-white font-semibold py-2 px-4 rounded transition-colors;
   }
   
   .btn-secondary {
-    @apply bg-gray-200 hover:bg-gray-300 text-gray-800 font-semibold py-2 px-4 rounded-lg transition-colors;
+    @apply bg-gray-200 hover:bg-gray-300 text-gray-800 font-semibold py-2 px-4 rounded transition-colors;
+  }
+
+  .table-cell {
+    @apply border border-gray-300 px-3 py-2 text-center;
+  }
+
+  .table-header {
+    @apply border border-gray-400 px-3 py-2 text-center bg-gray-100 font-bold;
+  }
+
+  .recommended-box {
+    @apply border-4 border-blue-600 bg-blue-50;
   }
 }
