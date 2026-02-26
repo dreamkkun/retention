@@ -7,6 +7,8 @@ const AdminDashboard = ({ onLogout, isAdmin = true }) => {
   const [uploadStatus, setUploadStatus] = useState(null);
   const [selectedFile, setSelectedFile] = useState(null);
   const [uploadType, setUploadType] = useState('excel'); // 'excel' or 'image'
+  const [imageTitle, setImageTitle] = useState('');
+  const [imageCategory, setImageCategory] = useState('bundle');
   const [backendStatus, setBackendStatus] = useState('checking'); // 'checking', 'online', 'offline'
   const [activeSection, setActiveSection] = useState('upload'); // 'upload', 'users'
 
@@ -65,22 +67,41 @@ const AdminDashboard = ({ onLogout, isAdmin = true }) => {
   };
 
   const handleImageUpload = (file) => {
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      try {
-        // 이미지를 assets 폴더로 복사하도록 안내
-        setUploadStatus({
-          type: 'success',
-          message: `이미지가 선택되었습니다: ${file.name}\n\n이미지를 public/assets/ 폴더에 복사하고, policies.json의 policy_images 섹션을 업데이트하세요.`
-        });
-      } catch (error) {
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('title', imageTitle || file.name.replace(/\.[^/.]+$/, ''));
+    formData.append('category', imageCategory);
+
+    setUploadStatus({
+      type: 'info',
+      message: '이미지 업로드 중...'
+    });
+
+    fetch(`${API_URL}/api/upload-image`, {
+      method: 'POST',
+      body: formData
+    })
+      .then(response => response.json())
+      .then(data => {
+        if (data.success) {
+          setUploadStatus({
+            type: 'success',
+            message: `✅ ${data.message}\n\npolicies.json에 자동 반영되었습니다.\n페이지를 새로고침하면 이미지가 표시됩니다.`
+          });
+          setSelectedFile(null);
+        } else {
+          setUploadStatus({
+            type: 'error',
+            message: data.error || '업로드 실패'
+          });
+        }
+      })
+      .catch(error => {
         setUploadStatus({
           type: 'error',
-          message: `오류 발생: ${error.message}`
+          message: `서버 연결 실패: ${error.message}\n\n로컬 백엔드가 실행 중인지 확인하세요. (localhost:3000에서 사용)`
         });
-      }
-    };
-    reader.readAsDataURL(file);
+      });
   };
 
   const handleFileChange = (e) => {
@@ -257,6 +278,36 @@ const AdminDashboard = ({ onLogout, isAdmin = true }) => {
                   <option value="image">🖼️ 이미지 파일 (.png, .jpg)</option>
                 </select>
               </div>
+
+              {uploadType === 'image' && (
+                <>
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">제목 (선택)</label>
+                    <input
+                      type="text"
+                      value={imageTitle}
+                      onChange={(e) => setImageTitle(e.target.value)}
+                      placeholder="예: 번들 재약정 정책"
+                      className="w-full px-4 py-2 border border-gray-300 rounded focus:border-gray-500 focus:outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">카테고리</label>
+                    <select
+                      value={imageCategory}
+                      onChange={(e) => setImageCategory(e.target.value)}
+                      className="w-full px-4 py-2 border border-gray-300 rounded focus:border-gray-500 focus:outline-none"
+                    >
+                      <option value="bundle">번들 재약정</option>
+                      <option value="equal_bundle">동등결합</option>
+                      <option value="d_standalone">D단독</option>
+                      <option value="single">단독 TV</option>
+                      <option value="new">신규/후번들</option>
+                      <option value="care">조금만 Care</option>
+                    </select>
+                  </div>
+                </>
+              )}
 
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-2">

@@ -13,6 +13,10 @@ CORS(app)
 # 파일 경로
 ACCESS_LOG_FILE = 'access_logs.json'
 USERS_FILE = 'users.json'
+BACKEND_DIR = os.path.dirname(os.path.abspath(__file__))
+PROJECT_ROOT = os.path.dirname(BACKEND_DIR)
+POLICIES_JSON_PATH = os.path.join(PROJECT_ROOT, 'src', 'data', 'policies.json')
+PUBLIC_ASSETS_PATH = os.path.join(PROJECT_ROOT, 'public', 'assets')
 
 # IP 화이트리스트 설정
 ENABLE_IP_WHITELIST = os.getenv('ENABLE_IP_WHITELIST', 'false').lower() == 'true'
@@ -329,6 +333,93 @@ def change_user_role(user_id):
         
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+
+# ========================================
+# 이미지 업로드 API
+# ========================================
+
+@app.route('/api/upload-image', methods=['POST'])
+@check_ip_whitelist
+def upload_image():
+    """정책 이미지 업로드 - public/assets에 저장 후 policies.json 업데이트"""
+    if 'file' not in request.files:
+        return jsonify({'error': '파일이 없습니다.'}), 400
+    
+    file = request.files['file']
+    title = request.form.get('title', '정책 이미지')
+    category = request.form.get('category', 'bundle')
+    
+    if file.filename == '':
+        return jsonify({'error': '파일을 선택해주세요.'}), 400
+    
+    allowed_ext = ('.png', '.jpg', '.jpeg')
+    if not file.filename.lower().endswith(allowed_ext):
+        return jsonify({'error': 'PNG, JPG 이미지 파일만 업로드 가능합니다.'}), 400
+    
+    try:
+        # public/assets 폴더 생성
+        os.makedirs(PUBLIC_ASSETS_PATH, exist_ok=True)
+        
+        # 파일명 정리 (한글 지원)
+        safe_name = file.filename.replace(' ', '_')
+        if not safe_name.lower().endswith(allowed_ext):
+            safe_name += '.png'
+        
+        save_path = os.path.join(PUBLIC_ASSETS_PATH, safe_name)
+        file.save(save_path)
+        
+        # policies.json 로드 및 업데이트
+        if os.path.exists(POLICIES_JSON_PATH):
+            with open(POLICIES_JSON_PATH, 'r', encoding='utf-8') as f:
+                policies = json.load(f)
+        else:
+            return jsonify({'error': 'policies.json을 찾을 수 없습니다.'}), 500
+        
+        if 'policy_images' not in policies:
+            policies['policy_images'] = []
+        
+        # 새 이미지 항목 추가
+        existing_ids = [img['id'] for img in policies['policy_images']]
+        new_id = 1
+        while f'image_{new_id}' in existing_ids:
+            new_id += 1
+        
+        # 웹에서 사용할 경로: /assets/파일명
+        web_path = f'/assets/{safe_name}'
+        
+        new_image = {
+            'id': f'image_{new_id}',
+            'filename': web_path,
+            'title': title,
+            'category': category
+        }
+        policies['policy_images'].append(new_image)
+        
+        # metadata 업데이트
+        if 'metadata' in policies:
+            policies['metadata']['last_updated'] = datetime.now().strftime('%Y-%m-%d')
+        
+        # 저장
+        with open(POLICIES_JSON_PATH, 'w', encoding='utf-8') as f:
+            json.dump(policies, f, ensure_ascii=False, indent=2)
+        
+        log_access({
+            'action': 'IMAGE_UPLOADED',
+            'filename': safe_name,
+            'title': title,
+            'timestamp': datetime.now().isoformat()
+        })
+        
+        return jsonify({
+            'success': True,
+            'message': f'이미지가 저장되었습니다: {safe_name}',
+            'image': new_image,
+            'path': web_path
+        })
+        
+    except Exception as e:
+        return jsonify({'error': f'이미지 처리 중 오류: {str(e)}'}), 500
 
 
 # ========================================
