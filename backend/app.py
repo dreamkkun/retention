@@ -360,19 +360,37 @@ def upload_excel():
     if not file.filename.endswith(('.xlsx', '.xls', '.xlsm')):
         return jsonify({'error': '엑셀 파일만 업로드 가능합니다.'}), 400
     
+    app_excel = None
+    wb = None
+    temp_path = None
+    
     try:
-        with tempfile.NamedTemporaryFile(delete=False, suffix='.xlsx') as tmp_file:
+        # 임시 파일로 저장
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.xlsx', dir=os.getcwd()) as tmp_file:
             file.save(tmp_file.name)
             temp_path = tmp_file.name
         
-        app_excel = xw.App(visible=False)
-        wb = app_excel.books.open(temp_path)
+        print(f"📂 임시 파일 저장: {temp_path}")
         
+        # xlwings로 Excel 실행 (visible=True로 DRM 처리 가능하게)
+        app_excel = xw.App(visible=True, add_book=False)
+        
+        # 파일 열기 시도 (DRM 파일은 Excel에서 직접 열어야 함)
+        print(f"📖 Excel 파일 열기 시도...")
+        wb = app_excel.books.open(temp_path, update_links=False, read_only=True)
+        
+        print(f"✅ Excel 파일 열기 성공!")
+        
+        # 파일 파싱
         policy_data = parse_policy_excel(wb)
         
+        # 정리
         wb.close()
         app_excel.quit()
-        os.unlink(temp_path)
+        
+        # 임시 파일 삭제
+        if temp_path and os.path.exists(temp_path):
+            os.unlink(temp_path)
         
         log_access({
             'ip': client_ip,
@@ -388,13 +406,36 @@ def upload_excel():
         })
         
     except Exception as e:
+        # 에러 발생 시 정리
+        if wb:
+            try:
+                wb.close()
+            except:
+                pass
+        
+        if app_excel:
+            try:
+                app_excel.quit()
+            except:
+                pass
+        
+        if temp_path and os.path.exists(temp_path):
+            try:
+                os.unlink(temp_path)
+            except:
+                pass
+        
+        error_msg = str(e)
+        print(f"❌ 에러 발생: {error_msg}")
+        
         log_access({
             'ip': client_ip,
             'action': 'ERROR',
-            'error': str(e),
+            'error': error_msg,
             'timestamp': datetime.now().isoformat()
         })
-        return jsonify({'error': f'파일 처리 중 오류 발생: {str(e)}'}), 500
+        
+        return jsonify({'error': f'파일 처리 중 오류 발생: {error_msg}'}), 500
 
 
 def parse_policy_excel(wb):
