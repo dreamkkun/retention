@@ -439,16 +439,236 @@ def upload_excel():
 
 
 def parse_policy_excel(wb):
-    """엑셀 파싱 (기존 로직)"""
+    """엑셀 파싱 - 각 시트의 데이터를 읽어 JSON 구조로 변환"""
     policy_data = {
-        'bundle_retention': [],
-        'digital_renewal': [],
-        'equal_bundle': [],
-        'd_standalone': []
+        'bundle_retention_matrix': {
+            'rows': [],
+            'columns': []
+        },
+        'digital_renewal': {
+            'description': '디지털(TV) 재약정 정책',
+            'main_products': [],
+            'sub_products': []
+        },
+        'equal_bundle': {
+            'description': '동등결합 고객 정책',
+            'policies': []
+        },
+        'd_standalone': {
+            'description': 'D단독 고객 정책',
+            'tiers': []
+        }
     }
     
-    # 시트별 파싱 로직 (기존 코드)
+    try:
+        # 1. 번들 재약정 시트 파싱
+        if '1.번들재약정' in [sheet.name for sheet in wb.sheets]:
+            sheet = wb.sheets['1.번들재약정']
+            parse_bundle_retention(sheet, policy_data)
+            print("✅ 번들재약정 시트 파싱 완료")
+        
+        # 2. 디지털 재약정 시트 파싱
+        if '2.디지털재약정' in [sheet.name for sheet in wb.sheets]:
+            sheet = wb.sheets['2.디지털재약정']
+            parse_digital_renewal(sheet, policy_data)
+            print("✅ 디지털재약정 시트 파싱 완료")
+        
+        # 3. 동등결합 시트 파싱
+        if '3.동등결합' in [sheet.name for sheet in wb.sheets]:
+            sheet = wb.sheets['3.동등결합']
+            parse_equal_bundle(sheet, policy_data)
+            print("✅ 동등결합 시트 파싱 완료")
+        
+        # 4. D단독 시트 파싱
+        if '4.D단독' in [sheet.name for sheet in wb.sheets]:
+            sheet = wb.sheets['4.D단독']
+            parse_d_standalone(sheet, policy_data)
+            print("✅ D단독 시트 파싱 완료")
+        
+    except Exception as e:
+        print(f"⚠️ 파싱 중 오류: {str(e)}")
+        raise
+    
     return policy_data
+
+
+def parse_bundle_retention(sheet, policy_data):
+    """번들 재약정 시트 파싱"""
+    # 데이터는 2행부터 시작 (1행은 헤더)
+    row = 2
+    current_segment = None
+    
+    while True:
+        try:
+            # A열: 판가구간
+            segment = sheet.range(f'A{row}').value
+            if segment is None:
+                break
+            
+            # B열: 방어정책
+            policy = sheet.range(f'B{row}').value
+            # C열: 세부상품
+            product = sheet.range(f'C{row}').value
+            # D열: 상품권
+            gift_card = sheet.range(f'D{row}').value or 0
+            # E열: IPTV
+            iptv = sheet.range(f'E{row}').value or 0
+            
+            # 구간별로 그룹화
+            if segment and segment != current_segment:
+                current_segment = segment
+                # 새 구간 추가
+                segment_id = segment.replace('천원 이상', 'k').replace('천원 미만', 'k_below')
+                policy_data['bundle_retention_matrix']['rows'].append({
+                    'id': segment_id,
+                    'name': segment,
+                    'data': {}
+                })
+            
+            # 정책 및 상품 데이터 추가
+            # TODO: 실제 구조에 맞게 조정 필요
+            
+            row += 1
+            
+        except Exception as e:
+            print(f"행 {row} 파싱 오류: {e}")
+            row += 1
+            if row > 100:  # 안전장치
+                break
+
+
+def parse_digital_renewal(sheet, policy_data):
+    """디지털 재약정 시트 파싱"""
+    row = 2
+    
+    while True:
+        try:
+            # A열: 상품명
+            product_name = sheet.range(f'A{row}').value
+            if product_name is None:
+                break
+            
+            # B열: 월요금
+            monthly_fee = sheet.range(f'B{row}').value or 0
+            # C열: 유지_상품권
+            maintain_gift = sheet.range(f'C{row}').value or 0
+            # D열: 유지_할인
+            maintain_discount = sheet.range(f'D{row}').value or 0
+            # E열: 상향_상품권
+            upgrade_gift = sheet.range(f'E{row}').value or 0
+            # F열: 상향_할인
+            upgrade_discount = sheet.range(f'F{row}').value or 0
+            
+            product_data = {
+                'id': product_name.lower().replace(' ', '_'),
+                'name': product_name,
+                'monthly_fee': float(monthly_fee) if monthly_fee else 0,
+                'benefits': {
+                    'maintain': {
+                        'gift_card': int(maintain_gift) if maintain_gift else 0,
+                        'discount': int(maintain_discount) if maintain_discount else 0
+                    },
+                    'upgrade': {
+                        'gift_card': int(upgrade_gift) if upgrade_gift else 0,
+                        'discount': int(upgrade_discount) if upgrade_discount else 0
+                    }
+                }
+            }
+            
+            # 주상품/복수상품 구분 (비고 컬럼 확인)
+            notes = sheet.range(f'G{row}').value or ''
+            if '주상품' in str(notes):
+                policy_data['digital_renewal']['main_products'].append(product_data)
+            else:
+                policy_data['digital_renewal']['sub_products'].append(product_data)
+            
+            row += 1
+            
+        except Exception as e:
+            print(f"행 {row} 파싱 오류: {e}")
+            row += 1
+            if row > 100:
+                break
+
+
+def parse_equal_bundle(sheet, policy_data):
+    """동등결합 시트 파싱"""
+    row = 2
+    
+    while True:
+        try:
+            # A열: 방어정책
+            policy_type = sheet.range(f'A{row}').value
+            if policy_type is None:
+                break
+            
+            # B열: 상품권
+            gift_card = sheet.range(f'B{row}').value or 0
+            # C열: 월할인
+            discount = sheet.range(f'C{row}').value or 0
+            # D열: 설명
+            description = sheet.range(f'D{row}').value or ''
+            
+            policy_data['equal_bundle']['policies'].append({
+                'id': policy_type.lower().replace(' ', '_'),
+                'name': policy_type,
+                'gift_card': int(gift_card) if gift_card else 0,
+                'monthly_discount': int(discount) if discount else 0,
+                'description': description
+            })
+            
+            row += 1
+            
+        except Exception as e:
+            print(f"행 {row} 파싱 오류: {e}")
+            row += 1
+            if row > 100:
+                break
+
+
+def parse_d_standalone(sheet, policy_data):
+    """D단독 시트 파싱"""
+    row = 2
+    
+    while True:
+        try:
+            # A열: 판가구간
+            tier = sheet.range(f'A{row}').value
+            if tier is None:
+                break
+            
+            tier_data = {
+                'id': tier.replace('천원 이상', 'k').replace('천원 미만', 'k_below'),
+                'name': tier,
+                'policies': {
+                    'maintain': {
+                        'gift_card': int(sheet.range(f'B{row}').value or 0),
+                        'discount': int(sheet.range(f'C{row}').value or 0)
+                    },
+                    'change': {
+                        'gift_card': int(sheet.range(f'D{row}').value or 0),
+                        'discount': int(sheet.range(f'E{row}').value or 0)
+                    },
+                    'discount_apply': {
+                        'gift_card': int(sheet.range(f'F{row}').value or 0),
+                        'discount': int(sheet.range(f'G{row}').value or 0)
+                    },
+                    'contract_change': {
+                        'gift_card': int(sheet.range(f'H{row}').value or 0),
+                        'discount': int(sheet.range(f'I{row}').value or 0)
+                    }
+                }
+            }
+            
+            policy_data['d_standalone']['tiers'].append(tier_data)
+            
+            row += 1
+            
+        except Exception as e:
+            print(f"행 {row} 파싱 오류: {e}")
+            row += 1
+            if row > 100:
+                break
 
 
 @app.route('/api/health', methods=['GET'])
