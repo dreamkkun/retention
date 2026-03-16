@@ -16,8 +16,286 @@ const CATEGORY_LABELS = Object.fromEntries(
   CATEGORIES.filter(c => c.id !== 'all').map(c => [c.id, c.label])
 );
 
-// 가치제고 세부 순서 (후번들 → UHD전환 → 업셀링)
 const VALUE_SUB_ORDER = ['후번들', 'UHD전환', '업셀링'];
+
+// 번들 정책 테이블
+const BundleTable = () => {
+  const matrix = policiesData.bundle_retention_matrix;
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-sm border-collapse border border-gray-400">
+        <thead>
+          <tr className="bg-gray-200">
+            <th className="border border-gray-400 px-2 py-2 text-left" rowSpan={2}>요금대</th>
+            <th className="border border-gray-400 px-2 py-2 text-center bg-green-100" colSpan={2}>요금제 유지</th>
+            <th className="border border-gray-400 px-2 py-2 text-center bg-blue-100" colSpan={3}>요금제 상향</th>
+            <th className="border border-gray-400 px-2 py-2 text-center bg-orange-100">중간요금제</th>
+            <th className="border border-gray-400 px-2 py-2 text-center bg-gray-100">최저요금제</th>
+            <th className="border border-gray-400 px-2 py-2 text-center bg-pink-100">단독전환</th>
+          </tr>
+          <tr className="bg-gray-100">
+            <th className="border border-gray-400 px-2 py-1 text-center bg-green-50 text-xs">통일요금</th>
+            <th className="border border-gray-400 px-2 py-1 text-center bg-green-50 text-xs">WiFi+</th>
+            <th className="border border-gray-400 px-2 py-1 text-center bg-blue-50 text-xs">1G</th>
+            <th className="border border-gray-400 px-2 py-1 text-center bg-blue-50 text-xs">500M</th>
+            <th className="border border-gray-400 px-2 py-1 text-center bg-blue-50 text-xs">광랜</th>
+            <th className="border border-gray-400 px-2 py-1 text-center bg-orange-50 text-xs">반값요금</th>
+            <th className="border border-gray-400 px-2 py-1 text-center bg-gray-50 text-xs">특화요금</th>
+            <th className="border border-gray-400 px-2 py-1 text-center bg-pink-50 text-xs">인터넷단독</th>
+          </tr>
+        </thead>
+        <tbody>
+          {matrix.rows.map(row => (
+            <tr key={row.id} className="hover:bg-gray-50">
+              <td className="border border-gray-400 px-2 py-2 font-semibold text-gray-800 whitespace-nowrap">{row.name}</td>
+              <td className="border border-gray-400 px-2 py-2 text-center bg-green-50">{row.data.maintain?.unified?.gift_card ?? '-'}만원</td>
+              <td className="border border-gray-400 px-2 py-2 text-center bg-green-50">{row.data.maintain?.wifi_plus?.gift_card ?? '-'}만원</td>
+              <td className="border border-gray-400 px-2 py-2 text-center bg-blue-50 font-semibold">{row.data.upgrade?.['1g']?.gift_card ?? '-'}만원</td>
+              <td className="border border-gray-400 px-2 py-2 text-center bg-blue-50">{row.data.upgrade?.['500m']?.gift_card ?? '-'}만원</td>
+              <td className="border border-gray-400 px-2 py-2 text-center bg-blue-50">{row.data.upgrade?.gwanglan?.gift_card ?? '-'}만원</td>
+              <td className="border border-gray-400 px-2 py-2 text-center bg-orange-50">{row.data.middle?.half_price?.gift_card ?? '-'}만원</td>
+              <td className="border border-gray-400 px-2 py-2 text-center bg-gray-50">{row.data.lowest?.special?.gift_card ?? '-'}만원</td>
+              <td className="border border-gray-400 px-2 py-2 text-center bg-pink-50 text-gray-500">혜택없음</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <p className="text-xs text-gray-500 mt-2">* 상품권 금액 기준 (단위: 만원)</p>
+    </div>
+  );
+};
+
+// 번들(특화) 정책 테이블 - 동등결합 고객
+const Bundle2Table = () => {
+  const data = policiesData.equal_bundle;
+  return (
+    <div>
+      <p className="text-sm text-gray-600 mb-3 bg-blue-50 border border-blue-200 px-3 py-2 rounded">
+        동등결합(인터넷+디지털 결합) 고객 대상 정책입니다.
+      </p>
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm border-collapse border border-gray-400">
+          <thead>
+            <tr className="bg-gray-200">
+              <th className="border border-gray-400 px-3 py-2 text-left">구분</th>
+              <th className="border border-gray-400 px-3 py-2 text-center">상품권 (만원)</th>
+              <th className="border border-gray-400 px-3 py-2 text-center">월 할인 (만원)</th>
+              <th className="border border-gray-400 px-3 py-2 text-left">설명</th>
+            </tr>
+          </thead>
+          <tbody>
+            {data.categories.map(cat => (
+              <tr key={cat.id} className="hover:bg-gray-50">
+                <td className="border border-gray-400 px-3 py-2 font-semibold">{cat.name}</td>
+                <td className="border border-gray-400 px-3 py-2 text-center font-bold text-blue-700">{cat.gift_card}만원</td>
+                <td className="border border-gray-400 px-3 py-2 text-center">{cat.discount ? `${cat.discount}만원` : '-'}</td>
+                <td className="border border-gray-400 px-3 py-2 text-gray-600">{cat.description}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+};
+
+// 단독 정책 테이블
+const StandaloneTable = () => {
+  const data = policiesData.d_standalone;
+  return (
+    <div>
+      <p className="text-sm text-gray-600 mb-3 bg-orange-50 border border-orange-200 px-3 py-2 rounded">
+        디지털(TV) 단독 고객 대상 정책입니다.
+      </p>
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm border-collapse border border-gray-400">
+          <thead>
+            <tr className="bg-gray-200">
+              <th className="border border-gray-400 px-3 py-2 text-left">요금대</th>
+              <th className="border border-gray-400 px-3 py-2 text-center bg-green-100">유지</th>
+              <th className="border border-gray-400 px-3 py-2 text-center bg-blue-100">변경</th>
+              <th className="border border-gray-400 px-3 py-2 text-center bg-orange-100">할인적용</th>
+              <th className="border border-gray-400 px-3 py-2 text-center bg-purple-100">약정변경</th>
+            </tr>
+          </thead>
+          <tbody>
+            {data.price_tiers.map(tier => (
+              <tr key={tier.id} className="hover:bg-gray-50">
+                <td className="border border-gray-400 px-3 py-2 font-semibold">{tier.name}</td>
+                <td className="border border-gray-400 px-3 py-2 text-center bg-green-50">
+                  {tier.policies.maintain.gift_card}만원
+                </td>
+                <td className="border border-gray-400 px-3 py-2 text-center bg-blue-50">
+                  {tier.policies.change.gift_card}만원
+                </td>
+                <td className="border border-gray-400 px-3 py-2 text-center bg-orange-50">
+                  {tier.policies.discount_apply.gift_card}만원
+                  {tier.policies.discount_apply.discount > 0 && (
+                    <span className="text-xs text-green-700 ml-1">+{tier.policies.discount_apply.discount}만원할인</span>
+                  )}
+                </td>
+                <td className="border border-gray-400 px-3 py-2 text-center bg-purple-50">
+                  {tier.policies.contract_change?.gift_card ?? '-'}만원
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <p className="text-xs text-gray-500 mt-2">* 상품권 금액 기준 (단위: 만원)</p>
+    </div>
+  );
+};
+
+// 요금인상Care 정책
+const CareTable = () => {
+  const care = policiesData.price_increase_care;
+  const matrix = policiesData.bundle_retention_matrix;
+  return (
+    <div>
+      <div className="bg-red-50 border border-red-300 px-4 py-3 rounded mb-4">
+        <h4 className="font-bold text-red-800 mb-1">요금인상Care 정책</h4>
+        <p className="text-sm text-red-700">{care.description}</p>
+        <div className="mt-2 bg-red-100 border border-red-300 px-3 py-2 rounded">
+          <span className="font-bold text-red-800 text-lg">기본 혜택 대비 +{care.benefits.gift_card_bonus}만원 추가 지급</span>
+        </div>
+      </div>
+      <div className="bg-gray-50 border border-gray-300 px-4 py-3 rounded mb-4">
+        <h5 className="font-semibold text-gray-700 mb-2">대상 고객</h5>
+        <ul className="text-sm text-gray-600 list-disc ml-4">
+          {care.targets.map((t, i) => <li key={i}>{t}</li>)}
+        </ul>
+      </div>
+      <p className="text-sm text-gray-600 mb-3">기본 번들 정책 상품권에 <strong>+{care.benefits.gift_card_bonus}만원</strong>이 추가 지급됩니다:</p>
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm border-collapse border border-gray-400">
+          <thead>
+            <tr className="bg-gray-200">
+              <th className="border border-gray-400 px-2 py-2 text-left">요금대</th>
+              <th className="border border-gray-400 px-2 py-2 text-center bg-green-100">유지(통일)</th>
+              <th className="border border-gray-400 px-2 py-2 text-center bg-blue-100">상향(1G)</th>
+              <th className="border border-gray-400 px-2 py-2 text-center bg-blue-100">상향(500M)</th>
+              <th className="border border-gray-400 px-2 py-2 text-center bg-orange-100">중간(반값)</th>
+              <th className="border border-gray-400 px-2 py-2 text-center bg-gray-100">최저(특화)</th>
+            </tr>
+          </thead>
+          <tbody>
+            {matrix.rows.map(row => (
+              <tr key={row.id} className="hover:bg-gray-50">
+                <td className="border border-gray-400 px-2 py-2 font-semibold text-gray-800">{row.name}</td>
+                <td className="border border-gray-400 px-2 py-2 text-center bg-green-50 font-semibold text-red-700">
+                  {(row.data.maintain?.unified?.gift_card ?? 0) + care.benefits.gift_card_bonus}만원
+                </td>
+                <td className="border border-gray-400 px-2 py-2 text-center bg-blue-50 font-semibold text-red-700">
+                  {(row.data.upgrade?.['1g']?.gift_card ?? 0) + care.benefits.gift_card_bonus}만원
+                </td>
+                <td className="border border-gray-400 px-2 py-2 text-center bg-blue-50 font-semibold text-red-700">
+                  {(row.data.upgrade?.['500m']?.gift_card ?? 0) + care.benefits.gift_card_bonus}만원
+                </td>
+                <td className="border border-gray-400 px-2 py-2 text-center bg-orange-50 font-semibold text-red-700">
+                  {(row.data.middle?.half_price?.gift_card ?? 0) + care.benefits.gift_card_bonus}만원
+                </td>
+                <td className="border border-gray-400 px-2 py-2 text-center bg-gray-50 font-semibold text-red-700">
+                  {(row.data.lowest?.special?.gift_card ?? 0) + care.benefits.gift_card_bonus}만원
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <p className="text-xs text-red-600 mt-2">* 빨간 수치 = 기본 혜택 + {care.benefits.gift_card_bonus}만원 Care 추가분 합산</p>
+    </div>
+  );
+};
+
+// 가치제고 정책 테이블
+const ValueTable = () => {
+  const data = policiesData.new_service;
+  return (
+    <div className="space-y-6">
+      {/* 후번들 */}
+      <div>
+        <h4 className="text-base font-semibold text-gray-700 mb-3 border-l-4 border-blue-500 pl-3">후번들</h4>
+        <div className="grid md:grid-cols-2 gap-4">
+          <div className="border border-gray-300 rounded p-4">
+            <h5 className="font-semibold text-gray-700 mb-2 text-sm">회선 추가 혜택</h5>
+            <table className="w-full text-sm border-collapse border border-gray-300">
+              <thead>
+                <tr className="bg-gray-100">
+                  <th className="border border-gray-300 px-2 py-1 text-left">추가 회선</th>
+                  <th className="border border-gray-300 px-2 py-1 text-center">상품권</th>
+                </tr>
+              </thead>
+              <tbody>
+                {Object.entries(data.post_bundle.additional_line_benefits.gift_card).map(([k, v]) => (
+                  <tr key={k}>
+                    <td className="border border-gray-300 px-2 py-1">{k.replace('_line_addition', '회선').replace('_', ' ')}</td>
+                    <td className="border border-gray-300 px-2 py-1 text-center font-semibold">{v}만원</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div className="border border-gray-300 rounded p-4">
+            <h5 className="font-semibold text-gray-700 mb-2 text-sm">IPTV 추가 혜택</h5>
+            <div className="text-sm space-y-1">
+              <div className="flex justify-between">
+                <span className="text-gray-600">IPTV 추가 상품권</span>
+                <span className="font-semibold">{data.post_bundle.additional_line_benefits.iptv_benefits.gift_card}만원</span>
+              </div>
+              {Object.entries(data.post_bundle.additional_line_benefits.iptv_benefits.discount).map(([k, v]) => (
+                <div key={k} className="flex justify-between">
+                  <span className="text-gray-600">{k.replace('_year', '년').replace('_years', '년')} 할인</span>
+                  <span className="font-semibold text-green-700">{v}만원/월</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* UHD전환 */}
+      <div>
+        <h4 className="text-base font-semibold text-gray-700 mb-3 border-l-4 border-purple-500 pl-3">UHD전환</h4>
+        <div className="border border-gray-300 rounded p-4">
+          <div className="text-sm space-y-2">
+            <div className="bg-purple-50 border border-purple-200 px-3 py-2 rounded">
+              <p className="text-purple-800 font-semibold">HD → UHD 전환 시 혜택</p>
+            </div>
+            {policiesData.digital_renewal.main_products.map(prod => (
+              <div key={prod.id} className="flex justify-between items-center border border-gray-200 px-3 py-2 rounded">
+                <span className="text-gray-700">{prod.name} 업그레이드</span>
+                <div className="text-right">
+                  <span className="font-semibold text-purple-700 mr-2">{prod.benefits.upgrade.gift_card}만원</span>
+                  <span className="text-green-700 text-xs">+월{prod.benefits.upgrade.discount}만원할인</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* 업셀링 */}
+      <div>
+        <h4 className="text-base font-semibold text-gray-700 mb-3 border-l-4 border-green-500 pl-3">업셀링</h4>
+        <div className="border border-gray-300 rounded p-4">
+          <div className="text-sm space-y-2">
+            <div className="bg-green-50 border border-green-200 px-3 py-2 rounded">
+              <p className="text-green-800 font-semibold">요금제 상향 시 추가 혜택</p>
+            </div>
+            <div className="flex justify-between items-center border border-gray-200 px-3 py-2 rounded">
+              <span className="text-gray-700">요금제 상향 (모든 구간)</span>
+              <div className="text-right">
+                <span className="font-semibold text-green-700 mr-2">{data.upselling.price_tier_upgrade.any_upgrade.gift_card}만원</span>
+                <span className="text-green-600 text-xs">+IPTV할인 {data.upselling.price_tier_upgrade.any_upgrade.iptv_discount}만원</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
 
 const PolicyBoard = () => {
   const [activeFilter, setActiveFilter] = useState('all');
@@ -25,8 +303,6 @@ const PolicyBoard = () => {
   const [expandedImage, setExpandedImage] = useState(null);
 
   useEffect(() => {
-    // 1순위: 백엔드 API (로컬 실행 시)
-    // 2순위: policies.json 정적 데이터 (Vercel 배포 시 - git push 후 반영)
     fetch(`${API_URL}/api/policy-images`)
       .then(res => res.json())
       .then(data => {
@@ -43,118 +319,144 @@ const PolicyBoard = () => {
       });
   }, []);
 
-  // 활성 필터에 맞게 이미지 필터링
-  const filteredImages = activeFilter === 'all'
-    ? policyImages
-    : policyImages.filter(img => img.category === activeFilter);
-
-  // 가치제고 카테고리는 세부 순서(후번들→UHD전환→업셀링) 유지
-  const sortedImages = [...filteredImages].sort((a, b) => {
-    if (a.category === 'value' && b.category === 'value') {
-      const ai = VALUE_SUB_ORDER.findIndex(k => a.title.includes(k));
-      const bi = VALUE_SUB_ORDER.findIndex(k => b.title.includes(k));
-      return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
-    }
-    return 0;
-  });
-
   const getImageSrc = (img) => {
     const filename = img.filename || '';
-    // /assets/로 시작하면 Vercel 정적 파일로 직접 서빙 (백엔드 불필요)
     if (filename.startsWith('/assets/')) return filename;
     if (img.url && !img.url.startsWith('/api/')) return img.url;
-    // 백엔드 API 경로
     const name = filename.replace('/assets/', '') || filename;
     return `${API_URL}/api/images/${encodeURIComponent(name)}`;
   };
 
-  const renderVersionInfo = () => (
-    <div className="bg-gray-100 border border-gray-300 p-4 mb-4">
-      <div className="flex justify-between items-center">
-        <div>
-          <h2 className="text-xl font-bold text-gray-800">
-            [{policiesData.metadata.update_week}] 인터넷/TV 리텐션 정책
-          </h2>
-          <p className="text-gray-600 text-sm mt-1">
-            최종 업데이트: {policiesData.metadata.last_updated}
-          </p>
-        </div>
-        <div className="text-right">
-          <div className="bg-white border-2 border-gray-400 px-4 py-2 font-bold text-gray-800">
-            {policiesData.metadata.version}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
+  const filteredImages = activeFilter === 'all'
+    ? policyImages
+    : policyImages.filter(img => img.category === activeFilter);
 
-  const renderImages = () => {
-    if (sortedImages.length === 0) {
-      return (
-        <div className="text-center py-16 text-gray-400 border border-dashed border-gray-300 rounded">
-          <p className="text-lg mb-1">등록된 정책 이미지가 없습니다</p>
-          <p className="text-sm">관리자 페이지에서 이미지를 업로드해주세요</p>
-        </div>
-      );
-    }
-
-    // 가치제고 카테고리는 세부 제목별 그룹 표시
-    if (activeFilter === 'value') {
-      const groups = VALUE_SUB_ORDER.map(key => ({
-        key,
-        images: sortedImages.filter(img => img.title.includes(key)),
-      })).filter(g => g.images.length > 0);
-
-      // 매핑 안 된 나머지
-      const others = sortedImages.filter(img =>
-        !VALUE_SUB_ORDER.some(k => img.title.includes(k))
-      );
-      if (others.length > 0) groups.push({ key: '기타', images: others });
-
-      return (
-        <div className="space-y-6">
-          {groups.map(group => (
-            <div key={group.key}>
-              <h4 className="text-base font-semibold text-gray-700 mb-3 border-l-4 border-gray-400 pl-3">
-                {group.key}
-              </h4>
-              <div className="grid md:grid-cols-2 gap-4">
-                {group.images.map(img => renderImageCard(img))}
-              </div>
-            </div>
-          ))}
-        </div>
-      );
-    }
-
+  const renderImageCards = (images) => {
+    if (images.length === 0) return null;
     return (
-      <div className="grid md:grid-cols-2 gap-4">
-        {sortedImages.map(img => renderImageCard(img))}
+      <div className="grid md:grid-cols-2 gap-4 mb-6">
+        {images.map(img => (
+          <div key={img.id} className="border border-gray-300 rounded overflow-hidden shadow-sm">
+            <div className="bg-gray-100 px-3 py-2 flex justify-between items-center">
+              <span className="font-semibold text-sm text-gray-800">{img.title}</span>
+              <span className="text-xs bg-gray-200 text-gray-600 px-2 py-0.5 rounded">
+                {CATEGORY_LABELS[img.category] || img.category}
+              </span>
+            </div>
+            <img
+              src={getImageSrc(img)}
+              alt={img.title}
+              className="w-full cursor-zoom-in hover:opacity-95 transition-opacity"
+              onClick={() => setExpandedImage(img)}
+              onError={e => { e.target.style.display = 'none'; }}
+            />
+          </div>
+        ))}
       </div>
     );
   };
 
-  const renderImageCard = (img) => (
-    <div key={img.id} className="border border-gray-300 rounded overflow-hidden shadow-sm">
-      <div className="bg-gray-100 px-3 py-2 flex justify-between items-center">
-        <span className="font-semibold text-sm text-gray-800">{img.title}</span>
-        <span className="text-xs bg-gray-200 text-gray-600 px-2 py-0.5 rounded">
-          {CATEGORY_LABELS[img.category] || img.category}
-        </span>
-      </div>
-      <img
-        src={getImageSrc(img)}
-        alt={img.title}
-        className="w-full cursor-zoom-in hover:opacity-95 transition-opacity"
-        onClick={() => setExpandedImage(img)}
-        onError={e => { e.target.style.display = 'none'; }}
-      />
-    </div>
-  );
+  const renderPolicyTable = () => {
+    switch (activeFilter) {
+      case 'bundle':
+        return (
+          <div>
+            <h3 className="text-base font-bold text-gray-800 mb-3 border-b border-gray-300 pb-2">번들 재약정 혜택 정책표</h3>
+            <BundleTable />
+          </div>
+        );
+      case 'bundle2':
+        return (
+          <div>
+            <h3 className="text-base font-bold text-gray-800 mb-3 border-b border-gray-300 pb-2">번들(특화) / 동등결합 정책표</h3>
+            <Bundle2Table />
+          </div>
+        );
+      case 'standalone':
+        return (
+          <div>
+            <h3 className="text-base font-bold text-gray-800 mb-3 border-b border-gray-300 pb-2">단독 고객 정책표</h3>
+            <StandaloneTable />
+          </div>
+        );
+      case 'care':
+        return (
+          <div>
+            <h3 className="text-base font-bold text-gray-800 mb-3 border-b border-gray-300 pb-2">요금인상Care 정책표</h3>
+            <CareTable />
+          </div>
+        );
+      case 'value':
+        return (
+          <div>
+            <h3 className="text-base font-bold text-gray-800 mb-3 border-b border-gray-300 pb-2">가치제고 정책표</h3>
+            <ValueTable />
+          </div>
+        );
+      case 'all':
+      default:
+        return (
+          <div className="space-y-8">
+            <div>
+              <h3 className="text-base font-bold text-gray-800 mb-3 border-b border-gray-300 pb-2 flex items-center">
+                <span className="bg-green-600 text-white text-xs px-2 py-0.5 rounded mr-2">번들</span>
+                번들 재약정 혜택 정책표
+              </h3>
+              <BundleTable />
+            </div>
+            <div>
+              <h3 className="text-base font-bold text-gray-800 mb-3 border-b border-gray-300 pb-2 flex items-center">
+                <span className="bg-blue-600 text-white text-xs px-2 py-0.5 rounded mr-2">번들(특화)</span>
+                동등결합 정책표
+              </h3>
+              <Bundle2Table />
+            </div>
+            <div>
+              <h3 className="text-base font-bold text-gray-800 mb-3 border-b border-gray-300 pb-2 flex items-center">
+                <span className="bg-orange-600 text-white text-xs px-2 py-0.5 rounded mr-2">단독</span>
+                단독 고객 정책표
+              </h3>
+              <StandaloneTable />
+            </div>
+            <div>
+              <h3 className="text-base font-bold text-gray-800 mb-3 border-b border-gray-300 pb-2 flex items-center">
+                <span className="bg-red-600 text-white text-xs px-2 py-0.5 rounded mr-2">요금인상Care</span>
+                요금인상Care 정책표
+              </h3>
+              <CareTable />
+            </div>
+            <div>
+              <h3 className="text-base font-bold text-gray-800 mb-3 border-b border-gray-300 pb-2 flex items-center">
+                <span className="bg-purple-600 text-white text-xs px-2 py-0.5 rounded mr-2">가치제고</span>
+                가치제고 정책표
+              </h3>
+              <ValueTable />
+            </div>
+          </div>
+        );
+    }
+  };
 
   return (
     <div>
-      {renderVersionInfo()}
+      {/* 버전 정보 */}
+      <div className="bg-gray-100 border border-gray-300 p-4 mb-4">
+        <div className="flex justify-between items-center">
+          <div>
+            <h2 className="text-xl font-bold text-gray-800">
+              [{policiesData.metadata.update_week}] 인터넷/TV 리텐션 정책
+            </h2>
+            <p className="text-gray-600 text-sm mt-1">
+              최종 업데이트: {policiesData.metadata.last_updated}
+            </p>
+          </div>
+          <div className="text-right">
+            <div className="bg-white border-2 border-gray-400 px-4 py-2 font-bold text-gray-800">
+              {policiesData.metadata.version}
+            </div>
+          </div>
+        </div>
+      </div>
 
       {/* 카테고리 필터 */}
       <div className="mb-6 flex gap-2 flex-wrap">
@@ -173,9 +475,13 @@ const PolicyBoard = () => {
         ))}
       </div>
 
-      {/* 정책 이미지 */}
+      {/* 정책 내용 */}
       <div className="bg-white">
-        {renderImages()}
+        {/* 이미지 카드 (업로드된 경우) */}
+        {renderImageCards(filteredImages)}
+
+        {/* 정책 데이터 테이블 */}
+        {renderPolicyTable()}
       </div>
 
       {/* 이미지 확대 모달 */}
@@ -191,7 +497,7 @@ const PolicyBoard = () => {
                 onClick={() => setExpandedImage(null)}
                 className="text-gray-600 hover:text-gray-900 text-xl font-bold ml-4"
               >
-                ✕
+                X
               </button>
             </div>
             <img
