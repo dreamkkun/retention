@@ -9,6 +9,7 @@ const AdminDashboard = ({ onLogout, isAdmin = true }) => {
   const [uploadType, setUploadType] = useState('excel'); // 'excel' or 'image'
   const [imageTitle, setImageTitle] = useState('');
   const [imageCategory, setImageCategory] = useState('bundle');
+  const [imageSubTitle, setImageSubTitle] = useState('');
   const [backendStatus, setBackendStatus] = useState('checking'); // 'checking', 'online', 'offline'
   const [activeSection, setActiveSection] = useState('upload'); // 'upload', 'users'
 
@@ -72,7 +73,12 @@ const AdminDashboard = ({ onLogout, isAdmin = true }) => {
   const handleImageUpload = (file) => {
     const formData = new FormData();
     formData.append('file', file);
-    formData.append('title', imageTitle || file.name.replace(/\.[^/.]+$/, ''));
+    // 가치제고는 세부 구분(후번들/UHD전환/업셀링)을 제목에 포함
+    const baseTitle = imageTitle || file.name.replace(/\.[^/.]+$/, '');
+    const finalTitle = (imageCategory === 'value' && imageSubTitle)
+      ? `${imageSubTitle}`
+      : baseTitle;
+    formData.append('title', finalTitle);
     formData.append('category', imageCategory);
 
     setUploadStatus({
@@ -298,17 +304,31 @@ const AdminDashboard = ({ onLogout, isAdmin = true }) => {
                     <label className="block text-sm font-semibold text-gray-700 mb-2">카테고리</label>
                     <select
                       value={imageCategory}
-                      onChange={(e) => setImageCategory(e.target.value)}
+                      onChange={(e) => { setImageCategory(e.target.value); setImageSubTitle(''); }}
                       className="w-full px-4 py-2 border border-gray-300 rounded focus:border-gray-500 focus:outline-none"
                     >
-                      <option value="bundle">번들 재약정</option>
-                      <option value="equal_bundle">동등결합</option>
-                      <option value="d_standalone">D단독</option>
-                      <option value="single">단독 TV</option>
-                      <option value="new">신규/후번들</option>
-                      <option value="care">조금만 Care</option>
+                      <option value="bundle">번들</option>
+                      <option value="bundle2">번들(특화)</option>
+                      <option value="standalone">단독</option>
+                      <option value="care">요금인상Care</option>
+                      <option value="value">가치제고 (후번들/UHD전환/업셀링)</option>
                     </select>
                   </div>
+                  {imageCategory === 'value' && (
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">가치제고 세부 구분</label>
+                      <select
+                        value={imageSubTitle}
+                        onChange={(e) => setImageSubTitle(e.target.value)}
+                        className="w-full px-4 py-2 border border-gray-300 rounded focus:border-gray-500 focus:outline-none"
+                      >
+                        <option value="">선택하세요</option>
+                        <option value="후번들">후번들</option>
+                        <option value="UHD전환">UHD전환</option>
+                        <option value="업셀링">업셀링</option>
+                      </select>
+                    </div>
+                  )}
                 </>
               )}
 
