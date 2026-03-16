@@ -1,16 +1,57 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import policiesData from '../data/policies.json';
+import API_URL from '../config';
+
+// 카테고리 정의
+const CATEGORIES = [
+  { id: 'all',        label: '전체 보기' },
+  { id: 'bundle',     label: '번들' },
+  { id: 'bundle2',    label: '번들(특화)' },
+  { id: 'standalone', label: '단독' },
+  { id: 'care',       label: '요금인상Care' },
+  { id: 'value',      label: '가치제고' },
+];
+
+const CATEGORY_LABELS = Object.fromEntries(
+  CATEGORIES.filter(c => c.id !== 'all').map(c => [c.id, c.label])
+);
+
+// 가치제고 세부 순서 (후번들 → UHD전환 → 업셀링)
+const VALUE_SUB_ORDER = ['후번들', 'UHD전환', '업셀링'];
 
 const PolicyBoard = () => {
   const [activeFilter, setActiveFilter] = useState('all');
+  const [policyImages, setPolicyImages] = useState([]);
+  const [expandedImage, setExpandedImage] = useState(null);
 
-  const filters = [
-    { id: 'all', label: '전체 보기' },
-    { id: 'bundle', label: '번들 재약정' },
-    { id: 'equal_bundle', label: '동등결합' },
-    { id: 'digital', label: '디지털(TV)' },
-    { id: 'd_standalone', label: 'D단독' },
-  ];
+  useEffect(() => {
+    fetch(`${API_URL}/api/policy-images`)
+      .then(res => res.json())
+      .then(data => { if (data.images) setPolicyImages(data.images); })
+      .catch(() => {});
+  }, []);
+
+  // 활성 필터에 맞게 이미지 필터링
+  const filteredImages = activeFilter === 'all'
+    ? policyImages
+    : policyImages.filter(img => img.category === activeFilter);
+
+  // 가치제고 카테고리는 세부 순서(후번들→UHD전환→업셀링) 유지
+  const sortedImages = [...filteredImages].sort((a, b) => {
+    if (a.category === 'value' && b.category === 'value') {
+      const ai = VALUE_SUB_ORDER.findIndex(k => a.title.includes(k));
+      const bi = VALUE_SUB_ORDER.findIndex(k => b.title.includes(k));
+      return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
+    }
+    return 0;
+  });
+
+  const getImageSrc = (img) => {
+    if (img.url) {
+      return img.url.startsWith('/api/') ? `${API_URL}${img.url}` : img.url;
+    }
+    return `${API_URL}/api/images/${encodeURIComponent(img.filename.replace('/assets/', ''))}`;
+  };
 
   const renderVersionInfo = () => (
     <div className="bg-gray-100 border border-gray-300 p-4 mb-4">
@@ -32,249 +73,121 @@ const PolicyBoard = () => {
     </div>
   );
 
-  const renderBundleRetentionMatrix = () => {
-    const { columns, rows } = policiesData.bundle_retention_matrix;
+  const renderImages = () => {
+    if (sortedImages.length === 0) {
+      return (
+        <div className="text-center py-16 text-gray-400 border border-dashed border-gray-300 rounded">
+          <p className="text-lg mb-1">등록된 정책 이미지가 없습니다</p>
+          <p className="text-sm">관리자 페이지에서 이미지를 업로드해주세요</p>
+        </div>
+      );
+    }
+
+    // 가치제고 카테고리는 세부 제목별 그룹 표시
+    if (activeFilter === 'value') {
+      const groups = VALUE_SUB_ORDER.map(key => ({
+        key,
+        images: sortedImages.filter(img => img.title.includes(key)),
+      })).filter(g => g.images.length > 0);
+
+      // 매핑 안 된 나머지
+      const others = sortedImages.filter(img =>
+        !VALUE_SUB_ORDER.some(k => img.title.includes(k))
+      );
+      if (others.length > 0) groups.push({ key: '기타', images: others });
+
+      return (
+        <div className="space-y-6">
+          {groups.map(group => (
+            <div key={group.key}>
+              <h4 className="text-base font-semibold text-gray-700 mb-3 border-l-4 border-gray-400 pl-3">
+                {group.key}
+              </h4>
+              <div className="grid md:grid-cols-2 gap-4">
+                {group.images.map(img => renderImageCard(img))}
+              </div>
+            </div>
+          ))}
+        </div>
+      );
+    }
 
     return (
-      <div className="mb-8">
-        <h3 className="text-lg font-bold text-gray-800 mb-3">번들 재약정 정책</h3>
-        
-        <div className="overflow-x-auto">
-          <table className="w-full border-collapse border border-gray-400">
-            <thead>
-              <tr className="bg-gray-100">
-                <th rowSpan="2" className="table-header">인터넷<br/>현재 판가</th>
-                {columns.map(column => (
-                  <th 
-                    key={column.id} 
-                    colSpan={column.sub_columns.length} 
-                    className="table-header"
-                  >
-                    {column.name}
-                    {column.recommended && <span className="ml-2 text-xs bg-blue-600 text-white px-2 py-1 rounded">추천</span>}
-                  </th>
-                ))}
-              </tr>
-              <tr className="bg-gray-50">
-                {columns.map(column => 
-                  column.sub_columns.map(subCol => (
-                    <th key={`${column.id}_${subCol.id}`} className="table-header text-sm">
-                      {subCol.name}
-                    </th>
-                  ))
-                )}
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map(row => (
-                <tr key={row.id}>
-                  <td className="table-cell bg-gray-50 font-semibold">{row.name}</td>
-                  {columns.map(column => 
-                    column.sub_columns.map(subCol => {
-                      const cellData = row.data[column.id]?.[subCol.id];
-                      const isRecommended = column.recommended && row.id === 'over_20k';
-                      
-                      return (
-                        <td 
-                          key={`${row.id}_${column.id}_${subCol.id}`} 
-                          className={`table-cell ${isRecommended ? 'recommended-box' : ''}`}
-                        >
-                          {cellData ? (
-                            <div>
-                              <div className="font-bold text-base">{cellData.gift_card || 0}</div>
-                              {cellData.iptv > 0 && (
-                                <div className="text-xs text-gray-600 mt-1">IPTV {cellData.iptv}</div>
-                              )}
-                            </div>
-                          ) : (
-                            <div className="text-gray-400">-</div>
-                          )}
-                        </td>
-                      );
-                    })
-                  )}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-
-        <div className="mt-2 text-xs text-gray-600">
-          * 단위: 만원 | 추천구간: 파란색 박스
-        </div>
+      <div className="grid md:grid-cols-2 gap-4">
+        {sortedImages.map(img => renderImageCard(img))}
       </div>
     );
   };
 
-  const renderDigitalRenewal = () => {
-    const digitalData = policiesData.digital_renewal;
-
-    return (
-      <div className="overflow-x-auto">
-        <table className="w-full border-collapse border border-gray-400">
-          <thead>
-            <tr className="bg-gray-100">
-              <th className="table-header">상품</th>
-              <th className="table-header">월 요금</th>
-              <th className="table-header">유지 혜택</th>
-              <th className="table-header">상향 혜택</th>
-            </tr>
-          </thead>
-          <tbody>
-            {digitalData.main_products.map(product => (
-              <tr key={product.id}>
-                <td className="table-cell bg-gray-50 font-semibold">{product.name}</td>
-                <td className="table-cell">{product.monthly_fee}만원</td>
-                <td className="table-cell">
-                  <div className="font-bold">{product.benefits.maintain.gift_card}만원</div>
-                  <div className="text-xs text-gray-600">할인 {product.benefits.maintain.discount}만원</div>
-                </td>
-                <td className="table-cell">
-                  <div className="font-bold">{product.benefits.upgrade.gift_card}만원</div>
-                  <div className="text-xs text-gray-600">할인 {product.benefits.upgrade.discount}만원</div>
-                </td>
-              </tr>
-            ))}
-            {digitalData.sub_products.map(product => (
-              <tr key={product.id}>
-                <td className="table-cell bg-gray-50 font-semibold">{product.name}</td>
-                <td className="table-cell">{product.monthly_fee}만원</td>
-                <td className="table-cell font-bold" colSpan="2">{product.gift_card}만원</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+  const renderImageCard = (img) => (
+    <div key={img.id} className="border border-gray-300 rounded overflow-hidden shadow-sm">
+      <div className="bg-gray-100 px-3 py-2 flex justify-between items-center">
+        <span className="font-semibold text-sm text-gray-800">{img.title}</span>
+        <span className="text-xs bg-gray-200 text-gray-600 px-2 py-0.5 rounded">
+          {CATEGORY_LABELS[img.category] || img.category}
+        </span>
       </div>
-    );
-  };
-
-  const renderEqualBundle = () => {
-    const equalBundleData = policiesData.equal_bundle;
-
-    return (
-      <div className="mb-8">
-        <h3 className="text-lg font-bold text-gray-800 mb-3">동등결합 정책</h3>
-        
-        <div className="overflow-x-auto">
-          <table className="w-full border-collapse border border-gray-400">
-            <thead>
-              <tr className="bg-gray-100">
-                <th className="table-header">구분</th>
-                <th className="table-header">상품권</th>
-                <th className="table-header">월 할인</th>
-                <th className="table-header">설명</th>
-              </tr>
-            </thead>
-            <tbody>
-              {equalBundleData.categories.map(category => (
-                <tr key={category.id}>
-                  <td className="table-cell bg-gray-50 font-semibold">{category.name}</td>
-                  <td className="table-cell font-bold">{category.gift_card}만원</td>
-                  <td className="table-cell">{category.discount > 0 ? `${category.discount}만원` : '-'}</td>
-                  <td className="table-cell text-xs text-gray-600">{category.description}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    );
-  };
-
-  const renderDStandalone = () => {
-    const dStandaloneData = policiesData.d_standalone;
-
-    return (
-      <div className="mb-8">
-        <h3 className="text-lg font-bold text-gray-800 mb-3">D단독 정책</h3>
-        
-        <div className="overflow-x-auto">
-          <table className="w-full border-collapse border border-gray-400">
-            <thead>
-              <tr className="bg-gray-100">
-                <th className="table-header">판가 구간</th>
-                <th className="table-header">요금제 유지</th>
-                <th className="table-header">요금제 변경</th>
-                <th className="table-header">할인적용</th>
-                <th className="table-header">약정변경</th>
-              </tr>
-            </thead>
-            <tbody>
-              {dStandaloneData.price_tiers.map(tier => (
-                <tr key={tier.id}>
-                  <td className="table-cell bg-gray-50 font-semibold">{tier.name}</td>
-                  <td className="table-cell">
-                    <div className="font-bold">{tier.policies.maintain.gift_card}만원</div>
-                    {tier.policies.maintain.discount > 0 && (
-                      <div className="text-xs text-gray-600">할인 {tier.policies.maintain.discount}만원</div>
-                    )}
-                  </td>
-                  <td className="table-cell">
-                    <div className="font-bold">{tier.policies.change.gift_card}만원</div>
-                    {tier.policies.change.discount > 0 && (
-                      <div className="text-xs text-gray-600">할인 {tier.policies.change.discount}만원</div>
-                    )}
-                  </td>
-                  <td className="table-cell">
-                    <div className="font-bold">{tier.policies.discount_apply.gift_card}만원</div>
-                    {tier.policies.discount_apply.discount > 0 && (
-                      <div className="text-xs text-gray-600">할인 {tier.policies.discount_apply.discount}만원</div>
-                    )}
-                  </td>
-                  <td className="table-cell">
-                    <div className="font-bold">{tier.policies.contract_change.gift_card}만원</div>
-                    {tier.policies.contract_change.discount > 0 && (
-                      <div className="text-xs text-gray-600">할인 {tier.policies.contract_change.discount}만원</div>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    );
-  };
+      <img
+        src={getImageSrc(img)}
+        alt={img.title}
+        className="w-full cursor-zoom-in hover:opacity-95 transition-opacity"
+        onClick={() => setExpandedImage(img)}
+        onError={e => { e.target.style.display = 'none'; }}
+      />
+    </div>
+  );
 
   return (
     <div>
       {renderVersionInfo()}
 
+      {/* 카테고리 필터 */}
       <div className="mb-6 flex gap-2 flex-wrap">
-        {filters.map(filter => (
+        {CATEGORIES.map(cat => (
           <button
-            key={filter.id}
-            onClick={() => setActiveFilter(filter.id)}
+            key={cat.id}
+            onClick={() => setActiveFilter(cat.id)}
             className={`py-2 px-4 rounded border transition-colors ${
-              activeFilter === filter.id
+              activeFilter === cat.id
                 ? 'bg-gray-700 text-white border-gray-700'
                 : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
             }`}
           >
-            {filter.label}
+            {cat.label}
           </button>
         ))}
       </div>
 
+      {/* 정책 이미지 */}
       <div className="bg-white">
-        {(activeFilter === 'all' || activeFilter === 'bundle') && (
-          <>
-            {renderBundleRetentionMatrix()}
-            <div className="mb-8">
-              <h3 className="text-lg font-bold text-gray-800 mb-3">디지털(TV) 혜택 (번들 고객용)</h3>
-              {renderDigitalRenewal()}
-            </div>
-          </>
-        )}
-        {(activeFilter === 'all' || activeFilter === 'digital') && (
-          <div className="mb-8">
-            <h3 className="text-lg font-bold text-gray-800 mb-3">디지털 재약정 정책</h3>
-            {renderDigitalRenewal()}
-          </div>
-        )}
-        {(activeFilter === 'all' || activeFilter === 'equal_bundle') && renderEqualBundle()}
-        {(activeFilter === 'all' || activeFilter === 'd_standalone') && renderDStandalone()}
+        {renderImages()}
       </div>
+
+      {/* 이미지 확대 모달 */}
+      {expandedImage && (
+        <div
+          className="fixed inset-0 bg-black bg-opacity-80 flex items-center justify-center z-50 p-4"
+          onClick={() => setExpandedImage(null)}
+        >
+          <div className="max-w-6xl w-full max-h-full overflow-auto bg-white rounded">
+            <div className="bg-gray-100 px-4 py-2 flex justify-between items-center sticky top-0">
+              <span className="font-semibold text-gray-800">{expandedImage.title}</span>
+              <button
+                onClick={() => setExpandedImage(null)}
+                className="text-gray-600 hover:text-gray-900 text-xl font-bold ml-4"
+              >
+                ✕
+              </button>
+            </div>
+            <img
+              src={getImageSrc(expandedImage)}
+              alt={expandedImage.title}
+              className="w-full"
+              onClick={e => e.stopPropagation()}
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 };

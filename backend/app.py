@@ -1,11 +1,29 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
-import xlwings as xw
 import os
 import tempfile
 import json
 from datetime import datetime
 from functools import wraps
+from werkzeug.utils import secure_filename
+
+# xlwings는 DRM 엑셀 처리 전용 (Windows + Excel 설치 환경 필요)
+# 없어도 서버 실행 가능 - 이미지 업로드는 항상 동작
+try:
+    import xlwings as xw
+    # Excel 앱 실제 사용 가능 여부 확인
+    try:
+        _test = xw.apps
+        XLWINGS_AVAILABLE = True
+        print("✅ xlwings 로드 성공 - DRM 엑셀 기능 사용 가능")
+    except Exception:
+        XLWINGS_AVAILABLE = False
+        xw = None
+        print("⚠️  xlwings 로드됨 but Microsoft Excel 미설치 - DRM 엑셀 기능 비활성화")
+except BaseException:
+    XLWINGS_AVAILABLE = False
+    xw = None
+    print("⚠️  xlwings 로드 실패 - DRM 엑셀 기능 비활성화 (이미지 업로드는 정상 사용 가능)")
 
 app = Flask(__name__)
 CORS(app)
@@ -360,9 +378,11 @@ def upload_image():
     try:
         # public/assets 폴더 생성
         os.makedirs(PUBLIC_ASSETS_PATH, exist_ok=True)
-        
-        # 파일명 정리 (한글 지원)
-        safe_name = file.filename.replace(' ', '_')
+
+        # 파일명 정리: 경로 제거 후 basename만 추출, 공백 → 언더스코어
+        original_name = os.path.basename(file.filename).replace(' ', '_')
+        # secure_filename으로 안전한 파일명 생성 (한글은 유지)
+        safe_name = original_name if original_name else 'image.png'
         if not safe_name.lower().endswith(allowed_ext):
             safe_name += '.png'
         
@@ -423,6 +443,73 @@ def upload_image():
 
 
 # ========================================
+# 이미지 서빙 및 조회 API
+# ========================================
+
+@app.route('/api/images/<path:filename>', methods=['GET'])
+def serve_image(filename):
+    """업로드된 이미지 파일 서빙"""
+    try:
+        return send_from_directory(PUBLIC_ASSETS_PATH, filename)
+    except Exception as e:
+        return jsonify({'error': f'이미지를 찾을 수 없습니다: {filename}'}), 404
+
+
+@app.route('/api/policy-images', methods=['GET'])
+def get_policy_images():
+    """policies.json에서 policy_images 목록 반환"""
+    try:
+        if os.path.exists(POLICIES_JSON_PATH):
+            with open(POLICIES_JSON_PATH, 'r', encoding='utf-8') as f:
+                policies = json.load(f)
+            images = policies.get('policy_images', [])
+            # 각 이미지의 filename을 백엔드 API URL로 변환
+            for img in images:
+                fname = img.get('filename', '')
+                if fname.startswith('/assets/'):
+                    img['url'] = fname  # 그대로 유지 (상대 경로)
+                elif not fname.startswith('http'):
+                    # 파일명만 추출하여 API 경로로 변환
+                    basename = os.path.basename(fname)
+                    img['url'] = f'/api/images/{basename}'
+            return jsonify({'images': images})
+        return jsonify({'images': []})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/policy-images/delete/<image_id>', methods=['DELETE'])
+@check_ip_whitelist
+def delete_policy_image(image_id):
+    """policy_images에서 이미지 항목 삭제"""
+    try:
+        if not os.path.exists(POLICIES_JSON_PATH):
+            return jsonify({'error': 'policies.json을 찾을 수 없습니다.'}), 500
+
+        with open(POLICIES_JSON_PATH, 'r', encoding='utf-8') as f:
+            policies = json.load(f)
+
+        images = policies.get('policy_images', [])
+        target = next((img for img in images if img['id'] == image_id), None)
+        if not target:
+            return jsonify({'error': '이미지를 찾을 수 없습니다.'}), 404
+
+        # 파일 삭제
+        fname = os.path.basename(target.get('filename', ''))
+        file_path = os.path.join(PUBLIC_ASSETS_PATH, fname)
+        if os.path.exists(file_path):
+            os.remove(file_path)
+
+        policies['policy_images'] = [img for img in images if img['id'] != image_id]
+        with open(POLICIES_JSON_PATH, 'w', encoding='utf-8') as f:
+            json.dump(policies, f, ensure_ascii=False, indent=2)
+
+        return jsonify({'success': True, 'message': '이미지가 삭제되었습니다.'})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+# ========================================
 # 기존 API (엑셀 업로드 등)
 # ========================================
 
@@ -450,19 +537,25 @@ def upload_excel():
     
     if not file.filename.endswith(('.xlsx', '.xls', '.xlsm')):
         return jsonify({'error': '엑셀 파일만 업로드 가능합니다.'}), 400
-    
+
+    if not XLWINGS_AVAILABLE:
+        return jsonify({
+            'error': 'DRM 엑셀 기능을 사용할 수 없습니다.',
+            'reason': 'Microsoft Excel이 설치된 Windows 환경에서만 DRM 엑셀 처리가 가능합니다. Windows PC에서 backend/app.py를 직접 실행하세요.'
+        }), 503
+
     app_excel = None
     wb = None
     temp_path = None
-    
+
     try:
         # 임시 파일로 저장
         with tempfile.NamedTemporaryFile(delete=False, suffix='.xlsx', dir=os.getcwd()) as tmp_file:
             file.save(tmp_file.name)
             temp_path = tmp_file.name
-        
+
         print(f"📂 임시 파일 저장: {temp_path}")
-        
+
         # xlwings로 Excel 실행 (visible=True로 DRM 처리 가능하게)
         app_excel = xw.App(visible=True, add_book=False)
         
