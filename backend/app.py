@@ -3,9 +3,41 @@ from flask_cors import CORS
 import os
 import tempfile
 import json
+import subprocess
 from datetime import datetime
 from functools import wraps
 from werkzeug.utils import secure_filename
+
+# 이미지 업로드 후 자동 git push 여부 (기본: 활성화)
+AUTO_GIT_PUSH = os.getenv('AUTO_GIT_PUSH', 'true').lower() == 'true'
+
+
+def git_push_image(safe_name):
+    """이미지와 policies.json을 git commit & push하여 Vercel 자동 배포 트리거"""
+    try:
+        cmds = [
+            ['git', 'add',
+             os.path.join('public', 'assets', safe_name),
+             os.path.join('src', 'data', 'policies.json')],
+            ['git', 'commit', '-m', f'chore: 정책 이미지 업로드 - {safe_name}'],
+            ['git', 'push', 'origin', 'main'],
+        ]
+        for cmd in cmds:
+            result = subprocess.run(
+                cmd, cwd=PROJECT_ROOT,
+                capture_output=True, text=True, timeout=30
+            )
+            if result.returncode != 0:
+                # 변경사항 없을 때 commit 실패는 무시
+                if 'nothing to commit' in result.stdout + result.stderr:
+                    continue
+                print(f"⚠️  git 명령 실패: {' '.join(cmd)}\n{result.stderr}")
+                return False, result.stderr
+        print(f"✅ git push 완료: {safe_name}")
+        return True, None
+    except Exception as e:
+        print(f"⚠️  git push 오류: {e}")
+        return False, str(e)
 
 # xlwings는 DRM 엑셀 처리 전용 (Windows + Excel 설치 환경 필요)
 # 없어도 서버 실행 가능 - 이미지 업로드는 항상 동작
@@ -430,14 +462,27 @@ def upload_image():
             'title': title,
             'timestamp': datetime.now().isoformat()
         })
-        
+
+        # 자동 git push → Vercel 자동 재배포 트리거
+        git_pushed = False
+        git_error = None
+        if AUTO_GIT_PUSH:
+            git_pushed, git_error = git_push_image(safe_name)
+
+        msg = f'이미지가 저장되었습니다: {safe_name}'
+        if git_pushed:
+            msg += '\n\nGitHub에 자동 반영되었습니다. Vercel 재배포 후 (약 1~2분) 사이트에 표시됩니다.'
+        elif AUTO_GIT_PUSH:
+            msg += f'\n\n⚠️ git push 실패 - 수동으로 push하면 Vercel에 반영됩니다.\n({git_error})'
+
         return jsonify({
             'success': True,
-            'message': f'이미지가 저장되었습니다: {safe_name}',
+            'message': msg,
             'image': new_image,
-            'path': web_path
+            'path': web_path,
+            'git_pushed': git_pushed
         })
-        
+
     except Exception as e:
         return jsonify({'error': f'이미지 처리 중 오류: {str(e)}'}), 500
 
@@ -503,6 +548,17 @@ def delete_policy_image(image_id):
         policies['policy_images'] = [img for img in images if img['id'] != image_id]
         with open(POLICIES_JSON_PATH, 'w', encoding='utf-8') as f:
             json.dump(policies, f, ensure_ascii=False, indent=2)
+
+        # 삭제 후 git push
+        if AUTO_GIT_PUSH:
+            try:
+                subprocess.run(['git', 'add', '-A'], cwd=PROJECT_ROOT, capture_output=True, timeout=10)
+                subprocess.run(['git', 'commit', '-m', f'chore: 정책 이미지 삭제 - {fname}'],
+                               cwd=PROJECT_ROOT, capture_output=True, timeout=10)
+                subprocess.run(['git', 'push', 'origin', 'main'],
+                               cwd=PROJECT_ROOT, capture_output=True, timeout=30)
+            except Exception:
+                pass
 
         return jsonify({'success': True, 'message': '이미지가 삭제되었습니다.'})
     except Exception as e:
