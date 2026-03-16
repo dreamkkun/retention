@@ -477,42 +477,5 @@
       }
     ]
   },
-  "policy_images": [
-    {
-      "id": "image_1",
-      "filename": "c__Users_mylog_AppData_Roaming_Cursor_User_workspaceStorage_6b2d08629743496c971dc57008dc8810_images_image-39356d02-91b2-46e2-9f28-1657b757e435.png",
-      "title": "번들 재약정 정책 Matrix",
-      "category": "bundle"
-    },
-    {
-      "id": "image_2",
-      "filename": "c__Users_mylog_AppData_Roaming_Cursor_User_workspaceStorage_6b2d08629743496c971dc57008dc8810_images_2-f2950be3-d404-4762-9471-bb257f49604f.png",
-      "title": "동등결합 상품 이용 고객",
-      "category": "equal_bundle"
-    },
-    {
-      "id": "image_3",
-      "filename": "c__Users_mylog_AppData_Roaming_Cursor_User_workspaceStorage_6b2d08629743496c971dc57008dc8810_images_3-22e5a69d-0968-4474-9594-41ee8d7933b0.png",
-      "title": "D단독 재약정 정책",
-      "category": "d_standalone"
-    },
-    {
-      "id": "image_4",
-      "filename": "c__Users_mylog_AppData_Roaming_Cursor_User_workspaceStorage_6b2d08629743496c971dc57008dc8810_images_image-234ad620-ae84-4c8c-a916-2e94a073cba4.png",
-      "title": "단독 TV 재약정 정책",
-      "category": "single"
-    },
-    {
-      "id": "image_5",
-      "filename": "c__Users_mylog_AppData_Roaming_Cursor_User_workspaceStorage_6b2d08629743496c971dc57008dc8810_images_image-b9ca0722-c5b9-4832-a069-28665187f3e9.png",
-      "title": "조금만 2+Care 정책",
-      "category": "care"
-    },
-    {
-      "id": "image_6",
-      "filename": "c__Users_mylog_AppData_Roaming_Cursor_User_workspaceStorage_6b2d08629743496c971dc57008dc8810_images_image-0302bcb5-abfb-405b-ab80-fd2abaa66c78.png",
-      "title": "신규/후번들/업셀링",
-      "category": "new"
-    }
-  ]
+  "policy_images": []
 }

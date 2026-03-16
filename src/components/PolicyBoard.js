@@ -1,8 +1,30 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import policiesData from '../data/policies.json';
+import API_URL from '../config';
+
+const CATEGORY_LABELS = {
+  bundle: '번들 재약정',
+  equal_bundle: '동등결합',
+  d_standalone: 'D단독',
+  single: '단독 TV',
+  new: '신규/후번들',
+  care: 'Care 정책',
+};
 
 const PolicyBoard = () => {
   const [activeFilter, setActiveFilter] = useState('all');
+  const [policyImages, setPolicyImages] = useState([]);
+  const [imageTab, setImageTab] = useState('all');
+  const [expandedImage, setExpandedImage] = useState(null);
+
+  useEffect(() => {
+    fetch(`${API_URL}/api/policy-images`)
+      .then(res => res.json())
+      .then(data => {
+        if (data.images) setPolicyImages(data.images);
+      })
+      .catch(() => {});
+  }, []);
 
   const filters = [
     { id: 'all', label: '전체 보기' },
@@ -236,6 +258,93 @@ const PolicyBoard = () => {
     );
   };
 
+  const renderPolicyImages = () => {
+    if (policyImages.length === 0) return null;
+
+    const imageTabs = ['all', ...Object.keys(CATEGORY_LABELS)];
+    const filtered = imageTab === 'all'
+      ? policyImages
+      : policyImages.filter(img => img.category === imageTab);
+
+    return (
+      <div className="mb-8">
+        <h3 className="text-lg font-bold text-gray-800 mb-3">정책 문서 이미지</h3>
+
+        {/* 이미지 카테고리 탭 */}
+        <div className="flex gap-2 flex-wrap mb-4">
+          {imageTabs.map(tab => {
+            const hasImages = tab === 'all'
+              ? true
+              : policyImages.some(img => img.category === tab);
+            if (!hasImages) return null;
+            return (
+              <button
+                key={tab}
+                onClick={() => setImageTab(tab)}
+                className={`py-1 px-3 rounded border text-sm transition-colors ${
+                  imageTab === tab
+                    ? 'bg-gray-700 text-white border-gray-700'
+                    : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+                }`}
+              >
+                {tab === 'all' ? '전체' : CATEGORY_LABELS[tab] || tab}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* 이미지 그리드 */}
+        <div className="grid md:grid-cols-2 gap-4">
+          {filtered.map(img => {
+            const src = img.url
+              ? (img.url.startsWith('/api/') ? `${API_URL}${img.url}` : img.url)
+              : `${API_URL}/api/images/${encodeURIComponent(img.filename.replace('/assets/', ''))}`;
+            return (
+              <div key={img.id} className="border border-gray-300 rounded overflow-hidden">
+                <div className="bg-gray-100 px-3 py-2 flex justify-between items-center">
+                  <span className="font-semibold text-sm text-gray-800">{img.title}</span>
+                  <span className="text-xs bg-gray-200 text-gray-600 px-2 py-0.5 rounded">
+                    {CATEGORY_LABELS[img.category] || img.category}
+                  </span>
+                </div>
+                <img
+                  src={src}
+                  alt={img.title}
+                  className="w-full cursor-zoom-in"
+                  onClick={() => setExpandedImage(img)}
+                  onError={e => { e.target.style.display = 'none'; }}
+                />
+              </div>
+            );
+          })}
+        </div>
+
+        {/* 확대 모달 */}
+        {expandedImage && (
+          <div
+            className="fixed inset-0 bg-black bg-opacity-80 flex items-center justify-center z-50 p-4"
+            onClick={() => setExpandedImage(null)}
+          >
+            <div className="max-w-6xl max-h-full overflow-auto bg-white rounded">
+              <div className="bg-gray-100 px-4 py-2 flex justify-between items-center">
+                <span className="font-semibold text-gray-800">{expandedImage.title}</span>
+                <button onClick={() => setExpandedImage(null)} className="text-gray-600 hover:text-gray-900 text-xl font-bold">✕</button>
+              </div>
+              <img
+                src={expandedImage.url
+                  ? (expandedImage.url.startsWith('/api/') ? `${API_URL}${expandedImage.url}` : expandedImage.url)
+                  : `${API_URL}/api/images/${encodeURIComponent(expandedImage.filename.replace('/assets/', ''))}`}
+                alt={expandedImage.title}
+                className="w-full"
+                onClick={e => e.stopPropagation()}
+              />
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
+
   return (
     <div>
       {renderVersionInfo()}
@@ -257,6 +366,9 @@ const PolicyBoard = () => {
       </div>
 
       <div className="bg-white">
+        {/* 정책 이미지 섹션 (항상 최상단에 표시) */}
+        {renderPolicyImages()}
+
         {(activeFilter === 'all' || activeFilter === 'bundle') && (
           <>
             {renderBundleRetentionMatrix()}
