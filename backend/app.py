@@ -1,12 +1,20 @@
 from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
-import xlwings as xw
 import os
 import tempfile
 import json
 from datetime import datetime
 from functools import wraps
 from werkzeug.utils import secure_filename
+
+# xlwings는 DRM 엑셀 처리 전용 - 없어도 서버 실행 가능
+try:
+    import xlwings as xw
+    XLWINGS_AVAILABLE = True
+except BaseException:
+    XLWINGS_AVAILABLE = False
+    xw = None
+    print("⚠️  xlwings 로드 실패 - DRM 엑셀 기능 비활성화 (이미지 업로드는 정상 사용 가능)")
 
 app = Flask(__name__)
 CORS(app)
@@ -520,19 +528,22 @@ def upload_excel():
     
     if not file.filename.endswith(('.xlsx', '.xls', '.xlsm')):
         return jsonify({'error': '엑셀 파일만 업로드 가능합니다.'}), 400
-    
+
+    if not XLWINGS_AVAILABLE:
+        return jsonify({'error': 'DRM 엑셀 기능을 사용할 수 없습니다. (xlwings 미설치 환경)'}), 503
+
     app_excel = None
     wb = None
     temp_path = None
-    
+
     try:
         # 임시 파일로 저장
         with tempfile.NamedTemporaryFile(delete=False, suffix='.xlsx', dir=os.getcwd()) as tmp_file:
             file.save(tmp_file.name)
             temp_path = tmp_file.name
-        
+
         print(f"📂 임시 파일 저장: {temp_path}")
-        
+
         # xlwings로 Excel 실행 (visible=True로 DRM 처리 가능하게)
         app_excel = xw.App(visible=True, add_book=False)
         
