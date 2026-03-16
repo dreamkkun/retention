@@ -41,20 +41,23 @@ const AdminDashboard = ({ onLogout, isAdmin = true }) => {
           const dataStr = JSON.stringify(data.data, null, 2);
           const dataUri = 'data:application/json;charset=utf-8,' + encodeURIComponent(dataStr);
           const exportFileDefaultName = `policy_update_${new Date().toISOString().split('T')[0]}.json`;
-          
+
           const linkElement = document.createElement('a');
           linkElement.setAttribute('href', dataUri);
           linkElement.setAttribute('download', exportFileDefaultName);
           linkElement.click();
-          
+
           setUploadStatus({
             type: 'success',
             message: `✅ DRM 엑셀 파일이 성공적으로 처리되었습니다!\n\nJSON 파일이 다운로드되었습니다.\n이 파일을 src/data/policies.json에 복사하세요.`
           });
         } else {
+          const errorMsg = data.reason
+            ? `오류: ${data.error}\n\n${data.reason}`
+            : `오류: ${data.error || '알 수 없는 오류'}`;
           setUploadStatus({
             type: 'error',
-            message: `오류: ${data.error || '알 수 없는 오류'}`
+            message: errorMsg
           });
         }
       })

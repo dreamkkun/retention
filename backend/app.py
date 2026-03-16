@@ -7,10 +7,19 @@ from datetime import datetime
 from functools import wraps
 from werkzeug.utils import secure_filename
 
-# xlwings는 DRM 엑셀 처리 전용 - 없어도 서버 실행 가능
+# xlwings는 DRM 엑셀 처리 전용 (Windows + Excel 설치 환경 필요)
+# 없어도 서버 실행 가능 - 이미지 업로드는 항상 동작
 try:
     import xlwings as xw
-    XLWINGS_AVAILABLE = True
+    # Excel 앱 실제 사용 가능 여부 확인
+    try:
+        _test = xw.apps
+        XLWINGS_AVAILABLE = True
+        print("✅ xlwings 로드 성공 - DRM 엑셀 기능 사용 가능")
+    except Exception:
+        XLWINGS_AVAILABLE = False
+        xw = None
+        print("⚠️  xlwings 로드됨 but Microsoft Excel 미설치 - DRM 엑셀 기능 비활성화")
 except BaseException:
     XLWINGS_AVAILABLE = False
     xw = None
@@ -530,7 +539,10 @@ def upload_excel():
         return jsonify({'error': '엑셀 파일만 업로드 가능합니다.'}), 400
 
     if not XLWINGS_AVAILABLE:
-        return jsonify({'error': 'DRM 엑셀 기능을 사용할 수 없습니다. (xlwings 미설치 환경)'}), 503
+        return jsonify({
+            'error': 'DRM 엑셀 기능을 사용할 수 없습니다.',
+            'reason': 'Microsoft Excel이 설치된 Windows 환경에서만 DRM 엑셀 처리가 가능합니다. Windows PC에서 backend/app.py를 직접 실행하세요.'
+        }), 503
 
     app_excel = None
     wb = None
