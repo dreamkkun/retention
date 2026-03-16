@@ -25,10 +25,22 @@ const PolicyBoard = () => {
   const [expandedImage, setExpandedImage] = useState(null);
 
   useEffect(() => {
+    // 1순위: 백엔드 API (로컬 실행 시)
+    // 2순위: policies.json 정적 데이터 (Vercel 배포 시 - git push 후 반영)
     fetch(`${API_URL}/api/policy-images`)
       .then(res => res.json())
-      .then(data => { if (data.images) setPolicyImages(data.images); })
-      .catch(() => {});
+      .then(data => {
+        if (data.images && data.images.length > 0) {
+          setPolicyImages(data.images);
+        } else if (policiesData.policy_images && policiesData.policy_images.length > 0) {
+          setPolicyImages(policiesData.policy_images);
+        }
+      })
+      .catch(() => {
+        if (policiesData.policy_images && policiesData.policy_images.length > 0) {
+          setPolicyImages(policiesData.policy_images);
+        }
+      });
   }, []);
 
   // 활성 필터에 맞게 이미지 필터링
@@ -47,10 +59,13 @@ const PolicyBoard = () => {
   });
 
   const getImageSrc = (img) => {
-    if (img.url) {
-      return img.url.startsWith('/api/') ? `${API_URL}${img.url}` : img.url;
-    }
-    return `${API_URL}/api/images/${encodeURIComponent(img.filename.replace('/assets/', ''))}`;
+    const filename = img.filename || '';
+    // /assets/로 시작하면 Vercel 정적 파일로 직접 서빙 (백엔드 불필요)
+    if (filename.startsWith('/assets/')) return filename;
+    if (img.url && !img.url.startsWith('/api/')) return img.url;
+    // 백엔드 API 경로
+    const name = filename.replace('/assets/', '') || filename;
+    return `${API_URL}/api/images/${encodeURIComponent(name)}`;
   };
 
   const renderVersionInfo = () => (
