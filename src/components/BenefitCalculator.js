@@ -1,26 +1,53 @@
 import React, { useState, useMemo } from 'react';
 import policiesData from '../data/policies.json';
 
-// 인터넷 요금대 판정
-const getInternetSegment = (price) => {
+const policyRows = policiesData.policy_rows || [];
+
+// 인터넷 요금대 판정 → price_grp 문자열
+const getInternetPriceGrp = (price) => {
   const p = parseInt(price);
   if (isNaN(p) || p <= 0) return null;
-  if (p >= 20000) return { id: 'over_20k', name: '20천원 이상' };
-  if (p >= 18000) return { id: 'over_18k', name: '18천원 이상' };
-  if (p >= 15000) return { id: 'over_15k', name: '15천원 이상' };
-  if (p >= 12000) return { id: 'over_12k', name: '12천원 이상' };
-  if (p >= 10000) return { id: 'over_10k', name: '10천원 이상' };
-  return { id: 'under_10k', name: '10천원 미만' };
+  if (p >= 20000) return '20천원 이상';
+  if (p >= 18000) return '18천원 이상';
+  if (p >= 15000) return '15천원 이상';
+  if (p >= 12000) return '12천원 이상';
+  if (p >= 10000) return '10천원 이상';
+  return '10천원 미만';
 };
 
-// D단독 TV 요금대 판정
-const getDStandaloneSegment = (price) => {
+// D단독 TV 요금대 판정 → price_grp 문자열
+const getDStandalonePriceGrp = (price) => {
   const p = parseInt(price);
   if (isNaN(p) || p <= 0) return null;
-  if (p >= 14000) return { id: 'over_14k', name: '14천원 이상' };
-  if (p >= 12000) return { id: 'over_12k', name: '12천원 이상' };
-  if (p >= 8000) return { id: 'over_8k', name: '8천원 이상' };
-  return { id: 'under_8k', name: '8천원 미만' };
+  if (p >= 14000) return '14천원 이상';
+  if (p >= 12000) return '12천원 이상';
+  if (p >= 8000) return '8천원 이상';
+  return '8천원 미만';
+};
+
+// planAction ID → 정책_소분류 문자열 (번들/I단독)
+const BUNDLE_ACTION_MAP = {
+  maintain:  '요금제유지',
+  upgrade:   '요금제상향',
+  middle:    '중간요금제',
+  lowest:    '최저요금제',
+  standalone: '단독전환',
+};
+
+// planAction ID → 정책_소분류 문자열 (번들(특화))
+const BUNDLE2_ACTION_MAP = {
+  maintain:        '요금제 유지',
+  change:          '요금제 변경',
+  discount:        '할인 적용',
+  contract_change: '약정 변경',
+};
+
+// planAction ID → 정책_소분류 문자열 (D단독)
+const DSTANDALONE_ACTION_MAP = {
+  maintain:        '유지',
+  change:          '변경',
+  discount_apply:  '할인적용',
+  contract_change: '약정변경',
 };
 
 const BenefitCalculator = () => {
@@ -28,11 +55,10 @@ const BenefitCalculator = () => {
   const [internetFee, setInternetFee] = useState('');
   const [digitalFee, setDigitalFee] = useState('');
   const [planAction, setPlanAction] = useState('');
-  const [subOption, setSubOption] = useState('');
+  const [subOption, setSubOption] = useState(''); // 상품군 값
   const [isPriceIncreaseCare, setIsPriceIncreaseCare] = useState(false);
   const [valueType, setValueType] = useState(''); // 후번들, UHD전환, 업셀링
 
-  // customerType 변경 시 planAction, subOption 초기화
   const handleCustomerTypeChange = (v) => {
     setCustomerType(v);
     setPlanAction('');
@@ -40,78 +66,146 @@ const BenefitCalculator = () => {
     setValueType('');
   };
 
-  // 번들/I단독용 세부 옵션 목록
+  // 번들/I단독: planAction에 따른 사용 가능한 상품군 목록
   const bundleSubOptions = useMemo(() => {
-    const matrix = policiesData.bundle_retention_matrix;
-    const col = matrix.columns.find(c => c.id === planAction);
-    return col ? col.sub_columns : [];
-  }, [planAction]);
+    if (customerType !== 'bundle' && customerType !== 'i_standalone') return [];
+    if (!planAction) return [];
+    const 소분류 = BUNDLE_ACTION_MAP[planAction];
+    if (!소분류) return [];
+    const rows = policyRows.filter(r =>
+      r['단독_번들여부'] === '번들' &&
+      r['정책_대분류'] === '번들' &&
+      r['정책_소분류'] === 소분류
+    );
+    const seen = new Set();
+    const result = [];
+    for (const r of rows) {
+      const sg = r['상품군'];
+      if (sg && !seen.has(sg)) {
+        seen.add(sg);
+        result.push({ id: sg, name: sg });
+      }
+    }
+    return result;
+  }, [customerType, planAction]);
 
   // 번들/I단독 혜택 계산
   const calcBundleBenefit = useMemo(() => {
     if (customerType !== 'bundle' && customerType !== 'i_standalone') return null;
-    if (!planAction || !subOption) return null;
-    const segment = getInternetSegment(internetFee);
-    if (!segment) return null;
-    const matrix = policiesData.bundle_retention_matrix;
-    const row = matrix.rows.find(r => r.id === segment.id);
-    if (!row) return null;
-    const cell = row.data[planAction]?.[subOption];
-    if (!cell) return null;
-    return { giftCard: cell.gift_card || 0, iptv: cell.iptv || 0, segment: segment.name };
+    if (!planAction) return null;
+    const priceGrp = getInternetPriceGrp(internetFee);
+    if (!priceGrp) return null;
+    const 소분류 = BUNDLE_ACTION_MAP[planAction];
+    if (!소분류) return null;
+    // 상품군 지정 없으면 해당 소분류의 첫 번째 row 사용
+    const rows = policyRows.filter(r =>
+      r['단독_번들여부'] === '번들' &&
+      r['정책_대분류'] === '번들' &&
+      r['price_grp'] === priceGrp &&
+      r['정책_소분류'] === 소분류 &&
+      (!subOption || r['상품군'] === subOption)
+    );
+    if (rows.length === 0) return null;
+    const row = rows[0];
+    return {
+      giftCard: row['사은품혜택'] || 0,
+      discount: row['요금할인액'] || 0,
+      segment: priceGrp,
+      상품군: row['상품군'],
+    };
   }, [customerType, internetFee, planAction, subOption]);
 
-  // 번들(특화)/동등결합 혜택 계산
+  // 번들(특화) 혜택 계산
   const calcBundle2Benefit = useMemo(() => {
     if (customerType !== 'bundle2') return null;
     if (!planAction) return null;
-    const equalBundle = policiesData.equal_bundle;
-    const cat = equalBundle.categories.find(c => c.id === planAction);
-    if (!cat) return null;
-    return { giftCard: cat.gift_card || 0, discount: cat.discount || 0, name: cat.name };
+    const 소분류 = BUNDLE2_ACTION_MAP[planAction];
+    if (!소분류) return null;
+    const rows = policyRows.filter(r =>
+      r['정책_대분류'] === '번들(특화)' &&
+      r['정책_소분류'] === 소분류
+    );
+    if (rows.length === 0) return null;
+    const row = rows[0];
+    return {
+      giftCard: row['사은품혜택'] || 0,
+      discount: row['요금할인액'] || 0,
+      name: 소분류,
+    };
   }, [customerType, planAction]);
 
   // D단독 혜택 계산
   const calcDStandaloneBenefit = useMemo(() => {
     if (customerType !== 'd_standalone') return null;
     if (!planAction) return null;
-    const segment = getDStandaloneSegment(digitalFee);
-    if (!segment) return null;
-    const tier = policiesData.d_standalone.price_tiers.find(t => t.id === segment.id);
-    if (!tier) return null;
-    let policy = null;
-    if (planAction === 'maintain') policy = tier.policies.maintain;
-    else if (planAction === 'change') policy = tier.policies.change;
-    else if (planAction === 'discount_apply') policy = tier.policies.discount_apply;
-    else if (planAction === 'contract_change') policy = tier.policies.contract_change;
-    if (!policy) return null;
-    return { giftCard: policy.gift_card || 0, discount: policy.discount || 0, segment: segment.name };
+    const priceGrp = getDStandalonePriceGrp(digitalFee);
+    if (!priceGrp) return null;
+    const 소분류 = DSTANDALONE_ACTION_MAP[planAction];
+    if (!소분류) return null;
+    const rows = policyRows.filter(r =>
+      r['svc_type'] === 'TV' &&
+      r['단독_번들여부'] === '단독' &&
+      r['price_grp'] === priceGrp &&
+      r['정책_소분류'] === 소분류
+    );
+    if (rows.length === 0) return null;
+    const row = rows[0];
+    return {
+      giftCard: row['사은품혜택'] || 0,
+      discount: row['요금할인액'] || 0,
+      segment: priceGrp,
+    };
   }, [customerType, digitalFee, planAction]);
 
-  // 가치제고 추가 혜택 계산
+  // 요금인상Care 추가 혜택
+  const careBonus = useMemo(() => {
+    if (!isPriceIncreaseCare) return 0;
+    const row = policyRows.find(r => r['정책_대분류'] === '요금인상Care');
+    if (row) return row['사은품혜택'] || 0;
+    return policiesData.price_increase_care?.benefits?.gift_card_bonus || 2;
+  }, [isPriceIncreaseCare]);
+
+  // 가치제고 추가 혜택
   const calcValueBenefit = useMemo(() => {
     if (!valueType) return null;
-    const ns = policiesData.new_service;
     if (valueType === '후번들') {
+      const rows = policyRows.filter(r =>
+        r['정책_대분류'] === '가치제고' &&
+        r['정책_중분류'] === '후번들'
+      ).sort((a, b) => (a['사은품혜택'] || 0) - (b['사은품혜택'] || 0));
+      const min = rows[0]?.['사은품혜택'] || 5;
       return {
         type: '후번들',
-        note: '회선 추가: 1회선+5만원 / 2회선+10만원 / 3회선+15만원',
-        giftCard: 5, // 최소 (1회선)
+        note: `회선 추가: 1회선+${rows[0]?.['사은품혜택'] || 5}만원 / 2회선+${rows[1]?.['사은품혜택'] || 10}만원 / 3회선+${rows[2]?.['사은품혜택'] || 15}만원`,
+        giftCard: min,
       };
-    } else if (valueType === 'UHD전환') {
-      const uhd = policiesData.digital_renewal.main_products.find(p => p.id === 'uhd');
+    }
+    if (valueType === 'UHD전환') {
+      const row = policyRows.find(r =>
+        r['정책_대분류'] === '가치제고' &&
+        r['정책_중분류'] === 'UHD전환'
+      );
+      const gift = row?.['사은품혜택'] ?? 25;
+      const disc = row?.['요금할인액'] ?? 7;
       return {
         type: 'UHD전환',
-        note: `UHD 업그레이드: 상품권 ${uhd?.benefits.upgrade.gift_card ?? 25}만원 + 월 할인 ${uhd?.benefits.upgrade.discount ?? 7}만원`,
-        giftCard: uhd?.benefits.upgrade.gift_card ?? 25,
-        discount: uhd?.benefits.upgrade.discount ?? 7,
+        note: `UHD 업그레이드: 상품권 ${gift}만원 + 월 할인 ${disc}만원`,
+        giftCard: gift,
+        discount: disc,
       };
-    } else if (valueType === '업셀링') {
-      const up = ns.upselling.price_tier_upgrade.any_upgrade;
+    }
+    if (valueType === '업셀링') {
+      const row = policyRows.find(r =>
+        r['정책_대분류'] === '가치제고' &&
+        r['정책_중분류'] === '업셀링'
+      );
+      const gift = row?.['사은품혜택'] ?? 2;
+      const disc = row?.['요금할인액'] ?? 2;
       return {
         type: '업셀링',
-        note: `요금제 상향: 상품권 ${up.gift_card}만원 + IPTV할인 ${up.iptv_discount}만원`,
-        giftCard: up.gift_card,
+        note: `요금제 상향: 상품권 ${gift}만원 + 월 할인 ${disc}만원`,
+        giftCard: gift,
+        discount: disc,
       };
     }
     return null;
@@ -119,32 +213,35 @@ const BenefitCalculator = () => {
 
   // 최종 결과 집계
   const result = useMemo(() => {
-    const careBonus = isPriceIncreaseCare ? (policiesData.price_increase_care?.benefits?.gift_card_bonus || 2) : 0;
-
     if (customerType === 'bundle' || customerType === 'i_standalone') {
       if (!calcBundleBenefit) return null;
       const base = calcBundleBenefit.giftCard;
-      const valuePart = calcValueBenefit;
-      const totalGiftCard = base + careBonus + (valuePart?.giftCard || 0);
-      const totalDiscount = valuePart?.discount || 0;
-      return { base, careBonus, valuePart, totalGiftCard, totalDiscount, segment: calcBundleBenefit.segment, iptv: calcBundleBenefit.iptv };
+      const totalGiftCard = base + careBonus + (calcValueBenefit?.giftCard || 0);
+      const totalDiscount = (calcBundleBenefit.discount || 0) + (calcValueBenefit?.discount || 0);
+      return { base, careBonus, valuePart: calcValueBenefit, totalGiftCard, totalDiscount,
+               segment: calcBundleBenefit.segment };
     }
     if (customerType === 'bundle2') {
       if (!calcBundle2Benefit) return null;
       const base = calcBundle2Benefit.giftCard;
       const totalGiftCard = base + careBonus;
-      return { base, careBonus, totalGiftCard, totalDiscount: calcBundle2Benefit.discount || 0, segment: calcBundle2Benefit.name };
+      return { base, careBonus, totalGiftCard, totalDiscount: calcBundle2Benefit.discount || 0,
+               segment: calcBundle2Benefit.name };
     }
     if (customerType === 'd_standalone') {
       if (!calcDStandaloneBenefit) return null;
       const base = calcDStandaloneBenefit.giftCard;
       const totalGiftCard = base + careBonus;
-      return { base, careBonus, totalGiftCard, totalDiscount: calcDStandaloneBenefit.discount || 0, segment: calcDStandaloneBenefit.segment };
+      return { base, careBonus, totalGiftCard, totalDiscount: calcDStandaloneBenefit.discount || 0,
+               segment: calcDStandaloneBenefit.segment };
     }
     return null;
-  }, [customerType, calcBundleBenefit, calcBundle2Benefit, calcDStandaloneBenefit, calcValueBenefit, isPriceIncreaseCare]);
+  }, [customerType, calcBundleBenefit, calcBundle2Benefit, calcDStandaloneBenefit,
+      calcValueBenefit, careBonus]);
 
   const totalFee = (parseInt(internetFee) || 0) + (parseInt(digitalFee) || 0);
+  const internetPriceGrp = getInternetPriceGrp(internetFee);
+  const dstandalonePriceGrp = getDStandalonePriceGrp(digitalFee);
 
   return (
     <div className="max-w-4xl">
@@ -156,10 +253,10 @@ const BenefitCalculator = () => {
           <label className="block text-sm font-semibold text-gray-700 mb-2">고객 유형</label>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
             {[
-              { id: 'bundle',      label: '번들 고객', desc: '인터넷+TV' },
-              { id: 'bundle2',     label: '번들(특화)', desc: '동등결합' },
-              { id: 'i_standalone', label: 'I단독 고객', desc: '인터넷만' },
-              { id: 'd_standalone', label: 'D단독 고객', desc: 'TV만' },
+              { id: 'bundle',       label: '번들 고객',    desc: '인터넷+TV' },
+              { id: 'bundle2',      label: '번들(특화)',   desc: '동등결합' },
+              { id: 'i_standalone', label: 'I단독 고객',  desc: '인터넷만' },
+              { id: 'd_standalone', label: 'D단독 고객',  desc: 'TV만' },
             ].map(ct => (
               <button
                 key={ct.id}
@@ -191,9 +288,9 @@ const BenefitCalculator = () => {
               placeholder="예: 21000"
               disabled={customerType === 'd_standalone'}
             />
-            {internetFee && getInternetSegment(internetFee) && customerType !== 'd_standalone' && (
+            {internetFee && internetPriceGrp && customerType !== 'd_standalone' && (
               <div className="mt-1 text-sm bg-blue-50 border border-blue-200 text-blue-800 px-3 py-1">
-                판정: <span className="font-bold">{getInternetSegment(internetFee).name}</span>
+                판정: <span className="font-bold">{internetPriceGrp}</span>
               </div>
             )}
           </div>
@@ -209,9 +306,9 @@ const BenefitCalculator = () => {
               placeholder="예: 14300"
               disabled={customerType === 'i_standalone'}
             />
-            {digitalFee && getDStandaloneSegment(digitalFee) && customerType === 'd_standalone' && (
+            {digitalFee && dstandalonePriceGrp && customerType === 'd_standalone' && (
               <div className="mt-1 text-sm bg-blue-50 border border-blue-200 text-blue-800 px-3 py-1">
-                판정: <span className="font-bold">{getDStandaloneSegment(digitalFee).name}</span>
+                판정: <span className="font-bold">{dstandalonePriceGrp}</span>
               </div>
             )}
           </div>
@@ -236,7 +333,7 @@ const BenefitCalculator = () => {
               className="mr-2"
             />
             <span className="text-sm font-semibold text-red-800">
-              요금인상Care 고객 (+{policiesData.price_increase_care?.benefits?.gift_card_bonus || 2}만원 추가)
+              요금인상Care 고객 (+{careBonus || (policiesData.price_increase_care?.benefits?.gift_card_bonus || 2)}만원 추가)
             </span>
           </label>
           <p className="text-xs text-red-600 ml-5 mt-1">2026년 요금인상 대상 고객 또는 불만/해지 의사 표현 고객</p>
@@ -290,7 +387,7 @@ const BenefitCalculator = () => {
         {/* 세부 옵션 (번들/I단독) */}
         {(customerType === 'bundle' || customerType === 'i_standalone') && bundleSubOptions.length > 0 && (
           <div className="mb-4">
-            <label className="block text-sm font-semibold text-gray-700 mb-2">세부 옵션</label>
+            <label className="block text-sm font-semibold text-gray-700 mb-2">세부 옵션 (상품군)</label>
             <select
               value={subOption}
               onChange={e => setSubOption(e.target.value)}
@@ -298,7 +395,7 @@ const BenefitCalculator = () => {
             >
               <option value="">선택하세요</option>
               {bundleSubOptions.map(opt => (
-                <option key={opt.id} value={opt.id}>{opt.name} - {opt.description}</option>
+                <option key={opt.id} value={opt.id}>{opt.name}</option>
               ))}
             </select>
           </div>
@@ -358,12 +455,6 @@ const BenefitCalculator = () => {
                 <div className="flex justify-between items-center border border-purple-200 px-3 py-2 rounded bg-purple-50">
                   <span className="text-purple-700">가치제고 ({result.valuePart.type})</span>
                   <span className="font-semibold text-purple-700">+{result.valuePart.giftCard}만원</span>
-                </div>
-              )}
-              {result.iptv > 0 && (
-                <div className="flex justify-between items-center border border-blue-200 px-3 py-2 rounded bg-blue-50">
-                  <span className="text-blue-700">IPTV 혜택</span>
-                  <span className="font-semibold text-blue-700">{result.iptv}만원</span>
                 </div>
               )}
             </div>
