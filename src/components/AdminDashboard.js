@@ -31,47 +31,28 @@ const AdminDashboard = ({ onLogout, isAdmin = true }) => {
     const formData = new FormData();
     formData.append('file', file);
 
-    setUploadStatus({
-      type: 'info',
-      message: '파일을 업로드 중입니다...'
-    });
+    setUploadStatus({ type: 'info', message: '엑셀 파일 처리 중...' });
 
-    // Flask 백엔드 API 호출
-    fetch(`${API_URL}/api/upload-excel`, {
-      method: 'POST',
-      body: formData
-    })
+    fetch(`${API_URL}/api/upload-excel`, { method: 'POST', body: formData })
       .then(response => response.json())
       .then(data => {
         if (data.success) {
-          // JSON 파일 다운로드
-          const dataStr = JSON.stringify(data.data, null, 2);
-          const dataUri = 'data:application/json;charset=utf-8,' + encodeURIComponent(dataStr);
-          const exportFileDefaultName = `policy_update_${new Date().toISOString().split('T')[0]}.json`;
-
-          const linkElement = document.createElement('a');
-          linkElement.setAttribute('href', dataUri);
-          linkElement.setAttribute('download', exportFileDefaultName);
-          linkElement.click();
-
           setUploadStatus({
             type: 'success',
-            message: `✅ DRM 엑셀 파일이 성공적으로 처리되었습니다!\n\nJSON 파일이 다운로드되었습니다.\n이 파일을 src/data/policies.json에 복사하세요.`
+            message: `✅ ${data.message}`
           });
+          setSelectedFile(null);
         } else {
           const errorMsg = data.reason
             ? `오류: ${data.error}\n\n${data.reason}`
             : `오류: ${data.error || '알 수 없는 오류'}`;
-          setUploadStatus({
-            type: 'error',
-            message: errorMsg
-          });
+          setUploadStatus({ type: 'error', message: errorMsg });
         }
       })
       .catch(error => {
         setUploadStatus({
           type: 'error',
-          message: `서버 연결 실패: ${error.message}\n\n백엔드 서버가 실행 중인지 확인하세요.\n(backend 폴더에서 python app.py 실행)`
+          message: `서버 연결 실패: ${error.message}\n\n백엔드 서버가 실행 중인지 확인하세요.`
         });
       });
   };

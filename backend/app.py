@@ -923,110 +923,324 @@ def delete_policy_image(image_id):
 @app.route('/api/upload-excel', methods=['POST'])
 @check_ip_whitelist
 def upload_excel():
-    """DRM 엑셀 파일 업로드"""
-    client_ip = request.remote_addr
-    user_agent = request.headers.get('User-Agent', 'Unknown')
-    
-    log_access({
-        'ip': client_ip,
-        'action': 'UPLOAD_EXCEL',
-        'user_agent': user_agent,
-        'timestamp': datetime.now().isoformat()
-    })
-    
+    """엑셀 파일 업로드 → policies.json 자동 업데이트
+    1순위: openpyxl (일반 xlsx)
+    2순위: xlwings (DRM 보호 파일, Windows+Excel 필요)
+    """
+    log_access({'action': 'UPLOAD_EXCEL', 'ip': request.remote_addr,
+                'timestamp': datetime.now().isoformat()})
+
     if 'file' not in request.files:
         return jsonify({'error': '파일이 없습니다.'}), 400
-    
     file = request.files['file']
-    
     if file.filename == '':
         return jsonify({'error': '파일이 선택되지 않았습니다.'}), 400
-    
     if not file.filename.endswith(('.xlsx', '.xls', '.xlsm')):
         return jsonify({'error': '엑셀 파일만 업로드 가능합니다.'}), 400
 
-    if not XLWINGS_AVAILABLE:
-        return jsonify({
-            'error': 'DRM 엑셀 기능을 사용할 수 없습니다.',
-            'reason': 'Microsoft Excel이 설치된 Windows 환경에서만 DRM 엑셀 처리가 가능합니다. Windows PC에서 backend/app.py를 직접 실행하세요.'
-        }), 503
+    file_bytes = file.read()
 
-    app_excel = None
-    wb = None
-    temp_path = None
-
+    # ── 1순위: openpyxl (DRM 없는 일반 xlsx) ──────────────────────────────
+    policy_data = None
+    parse_error = None
     try:
-        # 임시 파일로 저장
-        with tempfile.NamedTemporaryFile(delete=False, suffix='.xlsx', dir=os.getcwd()) as tmp_file:
-            file.save(tmp_file.name)
-            temp_path = tmp_file.name
-
-        print(f"📂 임시 파일 저장: {temp_path}")
-
-        # xlwings로 Excel 실행 (visible=True로 DRM 처리 가능하게)
-        app_excel = xw.App(visible=True, add_book=False)
-        
-        # 파일 열기 시도 (DRM 파일은 Excel에서 직접 열어야 함)
-        print(f"📖 Excel 파일 열기 시도...")
-        wb = app_excel.books.open(temp_path, update_links=False, read_only=True)
-        
-        print(f"✅ Excel 파일 열기 성공!")
-        
-        # 파일 파싱
-        policy_data = parse_policy_excel(wb)
-        
-        # 정리
-        wb.close()
-        app_excel.quit()
-        
-        # 임시 파일 삭제
-        if temp_path and os.path.exists(temp_path):
-            os.unlink(temp_path)
-        
-        log_access({
-            'ip': client_ip,
-            'action': 'EXCEL_PROCESSED',
-            'filename': file.filename,
-            'timestamp': datetime.now().isoformat()
-        })
-        
-        return jsonify({
-            'success': True,
-            'data': policy_data,
-            'message': '엑셀 파일이 성공적으로 처리되었습니다.'
-        })
-        
+        wb_op = openpyxl.load_workbook(io.BytesIO(file_bytes), data_only=True)
+        policy_data = parse_policy_openpyxl(wb_op)
+        print("✅ openpyxl 파싱 성공")
     except Exception as e:
-        # 에러 발생 시 정리
-        if wb:
+        parse_error = str(e)
+        print(f"⚠️ openpyxl 실패 ({e}), xlwings fallback 시도...")
+
+    # ── 2순위: xlwings fallback (DRM 파일) ──────────────────────────────
+    if policy_data is None:
+        if not XLWINGS_AVAILABLE:
+            return jsonify({
+                'error': f'파일을 열 수 없습니다: {parse_error}',
+                'reason': 'DRM 파일이면 Microsoft Excel이 설치된 Windows에서 백엔드를 실행하세요.'
+            }), 503
+
+        app_excel = None
+        temp_path = None
+        try:
+            with tempfile.NamedTemporaryFile(delete=False, suffix='.xlsx', dir=os.getcwd()) as tmp:
+                tmp.write(file_bytes)
+                temp_path = tmp.name
+            app_excel = xw.App(visible=True, add_book=False)
+            wb_xw = app_excel.books.open(temp_path, update_links=False, read_only=True)
+            policy_data = parse_policy_xlwings(wb_xw)
+            wb_xw.close()
+            print("✅ xlwings 파싱 성공")
+        except Exception as e2:
+            return jsonify({'error': f'파일 처리 중 오류 발생: {e2}', 'reason': str(parse_error)}), 500
+        finally:
+            if app_excel:
+                try: app_excel.quit()
+                except: pass
+            if temp_path and os.path.exists(temp_path):
+                try: os.unlink(temp_path)
+                except: pass
+
+    # ── policies.json 병합 업데이트 ──────────────────────────────────────
+    try:
+        with open(POLICIES_JSON_PATH, 'r', encoding='utf-8') as f:
+            policies = json.load(f)
+
+        if policy_data.get('bundle_retention_matrix', {}).get('rows'):
+            policies['bundle_retention_matrix']['rows'] = policy_data['bundle_retention_matrix']['rows']
+        if policy_data.get('digital_renewal', {}).get('main_products'):
+            policies['digital_renewal']['main_products'] = policy_data['digital_renewal']['main_products']
+        if policy_data.get('digital_renewal', {}).get('sub_products'):
+            policies['digital_renewal']['sub_products'] = policy_data['digital_renewal']['sub_products']
+        if policy_data.get('equal_bundle', {}).get('categories'):
+            policies['equal_bundle']['categories'] = policy_data['equal_bundle']['categories']
+        if policy_data.get('d_standalone', {}).get('price_tiers'):
+            policies['d_standalone']['price_tiers'] = policy_data['d_standalone']['price_tiers']
+
+        policies['metadata']['last_updated'] = datetime.now().strftime('%Y-%m-%d')
+
+        with open(POLICIES_JSON_PATH, 'w', encoding='utf-8') as f:
+            json.dump(policies, f, ensure_ascii=False, indent=2)
+
+        # git push → Vercel 자동 재배포
+        git_pushed = False
+        if AUTO_GIT_PUSH:
             try:
-                wb.close()
-            except:
-                pass
-        
-        if app_excel:
-            try:
-                app_excel.quit()
-            except:
-                pass
-        
-        if temp_path and os.path.exists(temp_path):
-            try:
-                os.unlink(temp_path)
-            except:
-                pass
-        
-        error_msg = str(e)
-        print(f"❌ 에러 발생: {error_msg}")
-        
-        log_access({
-            'ip': client_ip,
-            'action': 'ERROR',
-            'error': error_msg,
-            'timestamp': datetime.now().isoformat()
-        })
-        
-        return jsonify({'error': f'파일 처리 중 오류 발생: {error_msg}'}), 500
+                git_email = os.environ.get('GIT_USER_EMAIL', 'retention-admin@localhost')
+                git_name = os.environ.get('GIT_USER_NAME', 'Retention Admin')
+                subprocess.run(['git', 'config', 'user.email', git_email], cwd=PROJECT_ROOT, capture_output=True, timeout=10)
+                subprocess.run(['git', 'config', 'user.name', git_name], cwd=PROJECT_ROOT, capture_output=True, timeout=10)
+                subprocess.run(['git', 'add', POLICIES_JSON_PATH], cwd=PROJECT_ROOT, capture_output=True, timeout=10)
+                r = subprocess.run(['git', 'commit', '-m', f'chore: 정책 엑셀 업데이트 - {file.filename}'],
+                                   cwd=PROJECT_ROOT, capture_output=True, text=True, timeout=15)
+                if 'nothing to commit' not in (r.stdout + r.stderr):
+                    rp = subprocess.run(['git', 'push', 'origin', 'main'], cwd=PROJECT_ROOT, capture_output=True, text=True, timeout=30)
+                    git_pushed = rp.returncode == 0
+            except Exception as ge:
+                print(f"git push 오류: {ge}")
+
+        msg = f'엑셀 파일이 성공적으로 처리되었습니다.\npolicies.json에 자동 반영되었습니다.'
+        if git_pushed:
+            msg += '\n\nGitHub에 반영되었습니다. Vercel 재배포 후 사이트에 표시됩니다.'
+
+        return jsonify({'success': True, 'data': policies, 'message': msg, 'git_pushed': git_pushed})
+
+    except Exception as e:
+        # policies.json 업데이트 실패 시 데이터만 반환 (이전 방식)
+        return jsonify({'success': True, 'data': policy_data,
+                        'message': f'파싱 완료. policies.json 자동 업데이트 실패: {e}\n아래 JSON을 수동으로 적용하세요.'})
+
+
+def _cell_val(ws, row, col):
+    """openpyxl 셀 값 반환 (None 안전)"""
+    v = ws.cell(row=row, column=col).value
+    return v
+
+
+def _int_val(ws, row, col, default=0):
+    v = _cell_val(ws, row, col)
+    try: return int(float(v)) if v is not None else default
+    except: return default
+
+
+def parse_policy_openpyxl(wb):
+    """openpyxl workbook → policies.json 형식 dict"""
+    POLICY_TYPE_MAP = {
+        '유지': 'maintain', '요금제 유지': 'maintain', '요금제유지': 'maintain',
+        '상향': 'upgrade', '요금제 상향': 'upgrade', '요금제상향': 'upgrade',
+        '중간': 'middle', '중간요금제': 'middle',
+        '최저': 'lowest', '최저요금제': 'lowest',
+        '단독': 'standalone', '단독전환': 'standalone',
+    }
+    SUB_PRODUCT_MAP = {
+        '통일요금': 'unified', '통일요금/wifi상향': 'unified', '동일상품wifi상향': 'unified',
+        'wifi+': 'wifi_plus', 'wifi상향': 'unified',
+        '1g': '1g', '1g(기가)': '1g', '기가': '1g',
+        '500m': '500m',
+        '광랜': 'gwanglan',
+        '반값요금': 'half_price', '반값': 'half_price',
+        '특화요금': 'special', '특화': 'special',
+        '인터넷단독': 'internet_only',
+    }
+    FEE_TIER_IDS = {
+        '20천원이상': 'over_20k', '18천원이상': 'over_18k', '15천원이상': 'over_15k',
+        '12천원이상': 'over_12k', '10천원이상': 'over_10k', '10천원미만': 'under_10k',
+    }
+    DSTANDALONE_TIER_IDS = {
+        '14천원이상': 'over_14k', '12천원이상': 'over_12k', '8천원이상': 'over_8k', '8천원미만': 'under_8k',
+    }
+
+    result = {
+        'bundle_retention_matrix': {'rows': []},
+        'digital_renewal': {'main_products': [], 'sub_products': []},
+        'equal_bundle': {'categories': []},
+        'd_standalone': {'price_tiers': []},
+    }
+
+    sheet_names = wb.sheetnames
+
+    # ── 번들재약정 시트 ──────────────────────────────────────────────────
+    bundle_sheet = next((s for s in sheet_names if '번들재약정' in s or '번들' in s.lower()), None)
+    if bundle_sheet:
+        ws = wb[bundle_sheet]
+        tiers_data = {}  # tier_name -> {action_id -> {sub_id -> {gift_card, iptv}}}
+        tiers_order = []
+        for row in range(2, ws.max_row + 1):
+            tier = str(_cell_val(ws, row, 2) or '').strip()
+            if not tier:
+                continue
+            policy_raw = str(_cell_val(ws, row, 3) or '').strip()
+            sub_raw = str(_cell_val(ws, row, 4) or '').strip()
+            gift_card = _int_val(ws, row, 5)
+            iptv = _int_val(ws, row, 6)
+            notes = str(_cell_val(ws, row, 7) or '')
+
+            action_id = POLICY_TYPE_MAP.get(policy_raw, POLICY_TYPE_MAP.get(policy_raw.lower(), policy_raw.lower()))
+            sub_id = SUB_PRODUCT_MAP.get(sub_raw, SUB_PRODUCT_MAP.get(sub_raw.lower(), sub_raw.lower().replace(' ', '_')))
+
+            tier_norm = tier.replace(' ', '')
+            if tier_norm not in tiers_data:
+                tiers_data[tier_norm] = {}
+                tiers_order.append((tier_norm, tier))
+            if action_id not in tiers_data[tier_norm]:
+                tiers_data[tier_norm][action_id] = {}
+            tiers_data[tier_norm][action_id][sub_id] = {'gift_card': gift_card, 'iptv': iptv, 'notes': notes}
+
+        for tier_norm, tier_original in tiers_order:
+            tier_id = FEE_TIER_IDS.get(tier_norm, tier_norm.lower())
+            result['bundle_retention_matrix']['rows'].append({
+                'id': tier_id, 'name': tier_original, 'data': tiers_data[tier_norm]
+            })
+        print(f"  번들재약정: {len(result['bundle_retention_matrix']['rows'])}개 요금대")
+
+    # ── 디지털재약정 시트 ──────────────────────────────────────────────────
+    digital_sheet = next((s for s in sheet_names if '디지털' in s), None)
+    if digital_sheet:
+        ws = wb[digital_sheet]
+        for row in range(2, ws.max_row + 1):
+            name = str(_cell_val(ws, row, 1) or '').strip()
+            if not name:
+                continue
+            monthly_fee = _cell_val(ws, row, 2)
+            try: monthly_fee = float(str(monthly_fee).replace('만원', '')) if monthly_fee else 0
+            except: monthly_fee = 0
+            prod = {
+                'id': name.lower().replace(' ', '_').replace('(', '').replace(')', ''),
+                'name': name,
+                'monthly_fee': monthly_fee,
+                'benefits': {
+                    'maintain': {'gift_card': _int_val(ws, row, 3), 'discount': _int_val(ws, row, 4)},
+                    'upgrade':  {'gift_card': _int_val(ws, row, 5), 'discount': _int_val(ws, row, 6)},
+                }
+            }
+            notes = str(_cell_val(ws, row, 7) or '')
+            if '주상품' in notes:
+                result['digital_renewal']['main_products'].append(prod)
+            else:
+                result['digital_renewal']['sub_products'].append(prod)
+
+    # ── 동등결합 시트 ──────────────────────────────────────────────────
+    eq_sheet = next((s for s in sheet_names if '동등결합' in s or '결합' in s), None)
+    if eq_sheet:
+        ws = wb[eq_sheet]
+        for row in range(2, ws.max_row + 1):
+            name = str(_cell_val(ws, row, 1) or '').strip()
+            if not name:
+                continue
+            cat_id = POLICY_TYPE_MAP.get(name, name.lower().replace(' ', '_'))
+            result['equal_bundle']['categories'].append({
+                'id': cat_id, 'name': name,
+                'gift_card': _int_val(ws, row, 2),
+                'discount': _int_val(ws, row, 3),
+                'description': str(_cell_val(ws, row, 4) or ''),
+            })
+
+    # ── D단독 시트 ──────────────────────────────────────────────────
+    ds_sheet = next((s for s in sheet_names if 'D단독' in s or 'd단독' in s.lower()), None)
+    if ds_sheet:
+        ws = wb[ds_sheet]
+        for row in range(2, ws.max_row + 1):
+            tier = str(_cell_val(ws, row, 1) or '').strip()
+            if not tier:
+                continue
+            tier_norm = tier.replace(' ', '')
+            tier_id = DSTANDALONE_TIER_IDS.get(tier_norm, tier_norm.lower())
+            result['d_standalone']['price_tiers'].append({
+                'id': tier_id, 'name': tier,
+                'policies': {
+                    'maintain':         {'gift_card': _int_val(ws, row, 2), 'discount': _int_val(ws, row, 3)},
+                    'change':           {'gift_card': _int_val(ws, row, 4), 'discount': _int_val(ws, row, 5)},
+                    'discount_apply':   {'gift_card': _int_val(ws, row, 6), 'discount': _int_val(ws, row, 7)},
+                    'contract_change':  {'gift_card': _int_val(ws, row, 8), 'discount': _int_val(ws, row, 9)},
+                }
+            })
+
+    return result
+
+
+def parse_policy_xlwings(wb):
+    """xlwings workbook → policies.json 형식 dict (DRM 파일용)
+    내부적으로 openpyxl 없이 xlwings API 사용"""
+    def sv(sheet, row, col):
+        try: return sheet.range(f'{chr(64+col)}{row}').value
+        except: return None
+    def iv(sheet, row, col):
+        v = sv(sheet, row, col)
+        try: return int(float(v)) if v is not None else 0
+        except: return 0
+
+    POLICY_TYPE_MAP = {
+        '유지': 'maintain', '상향': 'upgrade', '중간': 'middle', '중간요금제': 'middle',
+        '최저': 'lowest', '최저요금제': 'lowest', '단독': 'standalone', '단독전환': 'standalone',
+    }
+    SUB_PRODUCT_MAP = {
+        '통일요금': 'unified', 'wifi+': 'wifi_plus', '1g': '1g', '1g(기가)': '1g',
+        '500m': '500m', '광랜': 'gwanglan', '반값요금': 'half_price',
+        '특화요금': 'special', '인터넷단독': 'internet_only',
+    }
+    FEE_TIER_IDS = {
+        '20천원이상': 'over_20k', '18천원이상': 'over_18k', '15천원이상': 'over_15k',
+        '12천원이상': 'over_12k', '10천원이상': 'over_10k', '10천원미만': 'under_10k',
+    }
+
+    result = {
+        'bundle_retention_matrix': {'rows': []},
+        'digital_renewal': {'main_products': [], 'sub_products': []},
+        'equal_bundle': {'categories': []},
+        'd_standalone': {'price_tiers': []},
+    }
+    sheet_names = [s.name for s in wb.sheets]
+
+    bundle_sheet = next((s for s in sheet_names if '번들재약정' in s), None)
+    if bundle_sheet:
+        ws = wb.sheets[bundle_sheet]
+        row, tiers_data, tiers_order = 2, {}, []
+        while True:
+            tier = sv(ws, row, 2)
+            if tier is None and row > 5: break
+            if tier:
+                tier_raw = str(tier).strip()
+                policy_raw = str(sv(ws, row, 3) or '').strip()
+                sub_raw = str(sv(ws, row, 4) or '').strip()
+                gift_card = iv(ws, row, 5)
+                iptv = iv(ws, row, 6)
+                action_id = POLICY_TYPE_MAP.get(policy_raw, policy_raw.lower())
+                sub_id = SUB_PRODUCT_MAP.get(sub_raw, SUB_PRODUCT_MAP.get(sub_raw.lower(), sub_raw.lower().replace(' ', '_')))
+                tier_norm = tier_raw.replace(' ', '')
+                if tier_norm not in tiers_data:
+                    tiers_data[tier_norm] = {}
+                    tiers_order.append((tier_norm, tier_raw))
+                if action_id not in tiers_data[tier_norm]:
+                    tiers_data[tier_norm][action_id] = {}
+                tiers_data[tier_norm][action_id][sub_id] = {'gift_card': gift_card, 'iptv': iptv}
+            row += 1
+            if row > 200: break
+        for tier_norm, tier_orig in tiers_order:
+            result['bundle_retention_matrix']['rows'].append({
+                'id': FEE_TIER_IDS.get(tier_norm, tier_norm.lower()),
+                'name': tier_orig, 'data': tiers_data[tier_norm]
+            })
+
+    return result
 
 
 def parse_policy_excel(wb):
