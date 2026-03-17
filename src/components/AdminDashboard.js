@@ -11,13 +11,19 @@ const AdminDashboard = ({ onLogout, isAdmin = true }) => {
   const [imageCategory, setImageCategory] = useState('bundle');
   const [imageSubTitle, setImageSubTitle] = useState('');
   const [backendStatus, setBackendStatus] = useState('checking'); // 'checking', 'online', 'offline'
+  const [backendCaps, setBackendCaps] = useState({}); // vision_api, excel_export
   const [activeSection, setActiveSection] = useState('upload'); // 'upload', 'users'
+  const [lastUploadedImage, setLastUploadedImage] = useState(null);
+  const [extractionStatus, setExtractionStatus] = useState(null);
 
   // 백엔드 서버 상태 확인
   React.useEffect(() => {
     fetch(`${API_URL}/api/health`)
       .then(response => response.json())
-      .then(() => setBackendStatus('online'))
+      .then(data => {
+        setBackendStatus('online');
+        setBackendCaps({ visionApi: data.vision_api, excelExport: data.excel_export });
+      })
       .catch(() => setBackendStatus('offline'));
   }, []);
 
@@ -95,8 +101,14 @@ const AdminDashboard = ({ onLogout, isAdmin = true }) => {
         if (data.success) {
           setUploadStatus({
             type: 'success',
-            message: `✅ ${data.message}\n\npolicies.json에 자동 반영되었습니다.\n페이지를 새로고침하면 이미지가 표시됩니다.`
+            message: `✅ ${data.message}`
           });
+          setLastUploadedImage({ filename: data.image?.filename, category: imageCategory });
+          if (data.extraction) {
+            setExtractionStatus({ success: true, data: data.extraction });
+          } else if (data.extraction_error) {
+            setExtractionStatus({ success: false, error: data.extraction_error });
+          }
           setSelectedFile(null);
         } else {
           setUploadStatus({
@@ -111,6 +123,28 @@ const AdminDashboard = ({ onLogout, isAdmin = true }) => {
           message: `서버 연결 실패: ${error.message}\n\n로컬 백엔드가 실행 중인지 확인하세요. (localhost:3000에서 사용)`
         });
       });
+  };
+
+  const handleExtractPolicy = (imageInfo) => {
+    setExtractionStatus({ loading: true });
+    fetch(`${API_URL}/api/extract-policy`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ filename: imageInfo.filename, category: imageInfo.category })
+    })
+      .then(r => r.json())
+      .then(data => {
+        if (data.success) {
+          setExtractionStatus({ success: true, data: data.extracted });
+        } else {
+          setExtractionStatus({ success: false, error: data.reason || data.error });
+        }
+      })
+      .catch(e => setExtractionStatus({ success: false, error: e.message }));
+  };
+
+  const handleExcelExport = () => {
+    window.open(`${API_URL}/api/export-excel`, '_blank');
   };
 
   const handleFileChange = (e) => {
@@ -218,13 +252,18 @@ const AdminDashboard = ({ onLogout, isAdmin = true }) => {
           <div>
             <h2 className="text-xl font-bold text-gray-800">⚙️ 관리자 대시보드</h2>
             {backendStatus === 'online' && (
-              <p className="text-xs text-green-600 mt-1">
-                ✓ 백엔드 서버 연결됨 (DRM 엑셀 처리 가능)
-              </p>
+              <div className="mt-1 flex flex-wrap gap-2">
+                <span className="text-xs text-green-600">✓ 백엔드 연결됨</span>
+                {backendCaps.visionApi
+                  ? <span className="text-xs text-blue-600 bg-blue-50 px-2 py-0.5 rounded">✓ AI 데이터추출 활성</span>
+                  : <span className="text-xs text-gray-500 bg-gray-100 px-2 py-0.5 rounded">△ AI추출 비활성 (ANTHROPIC_API_KEY 필요)</span>
+                }
+                {backendCaps.excelExport && <span className="text-xs text-green-600 bg-green-50 px-2 py-0.5 rounded">✓ Excel내보내기 가능</span>}
+              </div>
             )}
             {backendStatus === 'offline' && (
               <p className="text-xs text-red-600 mt-1">
-                ⚠️ 백엔드 서버 오프라인 (DRM 엑셀 처리 불가)
+                ⚠️ 백엔드 서버 오프라인
               </p>
             )}
           </div>
@@ -373,13 +412,78 @@ const AdminDashboard = ({ onLogout, isAdmin = true }) => {
                   <p className="font-semibold whitespace-pre-line">{uploadStatus.message}</p>
                 </div>
               )}
+
+              {/* 정책 데이터 추출 패널 */}
+              {lastUploadedImage && uploadType === 'image' && (
+                <div className="border border-blue-300 rounded bg-blue-50 p-4">
+                  <h4 className="font-semibold text-blue-800 mb-2">정책 데이터 추출</h4>
+                  {!backendCaps.visionApi ? (
+                    <div className="text-sm text-gray-600">
+                      <p className="mb-1">AI 자동 추출을 사용하려면 백엔드 서버에 환경변수를 설정하세요:</p>
+                      <code className="bg-gray-200 px-2 py-1 rounded text-xs block">set ANTHROPIC_API_KEY=sk-ant-...</code>
+                      <p className="mt-1 text-xs text-gray-500">설정 후 서버 재시작 필요</p>
+                    </div>
+                  ) : (
+                    <>
+                      <p className="text-sm text-blue-700 mb-3">업로드된 이미지에서 AI가 정책 표를 자동으로 읽어 데이터를 추출합니다.</p>
+                      <button
+                        onClick={() => handleExtractPolicy(lastUploadedImage)}
+                        disabled={extractionStatus?.loading}
+                        className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 text-white font-semibold py-2 rounded transition-colors"
+                      >
+                        {extractionStatus?.loading ? '추출 중...' : '정책 데이터 자동 추출 (AI)'}
+                      </button>
+                    </>
+                  )}
+
+                  {extractionStatus && !extractionStatus.loading && (
+                    <div className={`mt-3 p-3 rounded border text-sm ${
+                      extractionStatus.success
+                        ? 'bg-green-50 border-green-300 text-green-800'
+                        : 'bg-red-50 border-red-300 text-red-800'
+                    }`}>
+                      {extractionStatus.success ? (
+                        <>
+                          <p className="font-semibold mb-1">✅ 데이터 추출 완료</p>
+                          <p>문서: {extractionStatus.data?.title || '번들 정책'}</p>
+                          <p>버전: {extractionStatus.data?.version || '-'}</p>
+                          <p>추출된 요금대: {extractionStatus.data?.internet?.rows?.length || 0}개</p>
+                          <p className="mt-1 text-xs">policies.json에 반영되었습니다. 시뮬레이션에서 즉시 사용 가능합니다.</p>
+                        </>
+                      ) : (
+                        <p>추출 실패: {extractionStatus.error}</p>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* 현재 정책 Excel 내보내기 */}
+          <div className="card">
+            <h2 className="text-xl font-bold text-gray-800 mb-4">
+              📊 정책 Excel 내보내기
+            </h2>
+            <div className="bg-gray-50 border border-gray-300 p-4 rounded mb-4">
+              <p className="text-sm text-gray-600 mb-3">
+                현재 적용된 정책 데이터를 Excel 파일로 다운로드합니다.<br />
+                번들재약정 / 디지털재약정 / 동등결합 / D단독 / 요금인상Care 시트 포함
+              </p>
+              <button
+                onClick={handleExcelExport}
+                disabled={backendStatus !== 'online'}
+                className="w-full bg-green-700 hover:bg-green-800 disabled:bg-gray-400 text-white font-semibold py-2 rounded transition-colors"
+              >
+                {backendStatus === 'online' ? '📥 현재 정책 Excel 다운로드' : '(백엔드 서버 필요)'}
+              </button>
             </div>
           </div>
 
           {/* 템플릿 다운로드 */}
           <div className="card">
             <h2 className="text-xl font-bold text-gray-800 mb-4">
-              📥 템플릿 다운로드
+              📥 데이터 입력 템플릿
             </h2>
 
             <div className="space-y-4">
