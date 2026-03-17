@@ -34,7 +34,11 @@ AUTO_GIT_PUSH = os.getenv('AUTO_GIT_PUSH', 'true').lower() == 'true'
 def git_push_image(safe_name):
     """이미지와 policies.json을 git commit & push하여 Vercel 자동 배포 트리거"""
     try:
+        git_email = os.environ.get('GIT_USER_EMAIL', 'retention-admin@localhost')
+        git_name = os.environ.get('GIT_USER_NAME', 'Retention Admin')
         cmds = [
+            ['git', 'config', 'user.email', git_email],
+            ['git', 'config', 'user.name', git_name],
             ['git', 'add',
              os.path.join('public', 'assets', safe_name),
              os.path.join('src', 'data', 'policies.json')],
@@ -1304,6 +1308,10 @@ def extract_policy():
         # git push
         if AUTO_GIT_PUSH:
             try:
+                git_email = os.environ.get('GIT_USER_EMAIL', 'retention-admin@localhost')
+                git_name = os.environ.get('GIT_USER_NAME', 'Retention Admin')
+                subprocess.run(['git', 'config', 'user.email', git_email], cwd=PROJECT_ROOT, capture_output=True, timeout=10)
+                subprocess.run(['git', 'config', 'user.name', git_name], cwd=PROJECT_ROOT, capture_output=True, timeout=10)
                 subprocess.run(['git', 'add', POLICIES_JSON_PATH], cwd=PROJECT_ROOT, capture_output=True, timeout=10)
                 subprocess.run(['git', 'commit', '-m', f'chore: 정책 데이터 자동 추출 업데이트 - {basename}'],
                                cwd=PROJECT_ROOT, capture_output=True, timeout=10)
