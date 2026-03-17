@@ -1,12 +1,31 @@
-from flask import Flask, request, jsonify, send_from_directory
+from flask import Flask, request, jsonify, send_from_directory, send_file
 from flask_cors import CORS
 import os
+import io
+import base64
 import tempfile
 import json
 import subprocess
 from datetime import datetime
 from functools import wraps
 from werkzeug.utils import secure_filename
+
+# Anthropic Vision API (이미지→정책 데이터 추출용)
+try:
+    import anthropic as _anthropic_lib
+    ANTHROPIC_AVAILABLE = True
+except ImportError:
+    ANTHROPIC_AVAILABLE = False
+
+ANTHROPIC_API_KEY = os.environ.get('ANTHROPIC_API_KEY', '')
+
+# openpyxl (Excel 내보내기용)
+try:
+    import openpyxl
+    from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+    OPENPYXL_AVAILABLE = True
+except ImportError:
+    OPENPYXL_AVAILABLE = False
 
 # 이미지 업로드 후 자동 git push 여부 (기본: 활성화)
 AUTO_GIT_PUSH = os.getenv('AUTO_GIT_PUSH', 'true').lower() == 'true'
@@ -56,6 +75,309 @@ except BaseException:
     XLWINGS_AVAILABLE = False
     xw = None
     print("⚠️  xlwings 로드 실패 - DRM 엑셀 기능 비활성화 (이미지 업로드는 정상 사용 가능)")
+
+# ========================================
+# Claude Vision: 이미지 → 정책 데이터 추출
+# ========================================
+
+EXTRACTION_PROMPT = """이 리텐션 정책 문서 이미지에서 모든 정책 혜택 데이터를 추출해주세요.
+
+인터넷 섹션 테이블 (번들 재약정, 각 요금대별):
+- 요금대 행: 20천원이상, 18천원이상, 15천원이상, 12천원이상, 10천원이상, 10천원미만
+- 요금제 유형 열:
+  * 유지: 통일요금(동일상품WiFi상향/기기상향), WiFi+(신규요금WiFi+)
+  * 상향(신규요금): 1G(기가), 500M, 광랜
+  * 중간요금제: 반값요금
+  * 최저요금제: 특화요금
+  * 단독전환: 인터넷단독
+- 인증(특화)요금 열이 별도 있으면: 인증_1G, 인증_광랜 등으로 구분
+
+디지털 섹션 테이블 (3년약정, 상품별):
+- 주상품(IPTV): 각 요금대별 유지/채널상향/IPTV전환 혜택
+- 복수형 상품들
+
+동등결합 섹션:
+- 홀기/기라/광랜 각 유형별 혜택
+
+다음 JSON 형식으로만 반환하세요 (JSON 외 텍스트 없이):
+{
+  "title": "문서 제목",
+  "version": "버전 (예: 2603 V1)",
+  "internet": {
+    "rows": [
+      {
+        "tier": "20천원이상",
+        "min_fee": 20000,
+        "maintain_unified": 26,
+        "maintain_wifi_plus": 16,
+        "upgrade_1g": 26,
+        "upgrade_500m": 25,
+        "upgrade_gwanglan": 22,
+        "certified_1g": 13,
+        "certified_gwanglan": 11,
+        "middle_half_price": 20,
+        "lowest_special": 15,
+        "standalone": 0
+      }
+    ]
+  },
+  "digital": {
+    "main_products": [
+      {
+        "name": "IPTV",
+        "tier": "13천원이상",
+        "min_fee": 13000,
+        "maintain_gift": 10,
+        "upgrade_gift": 13,
+        "maintain_discount": 0,
+        "upgrade_discount": 0
+      }
+    ]
+  },
+  "equal_bundle": [
+    {"type": "홀기", "gift_card": 30, "discount": 0},
+    {"type": "기라", "gift_card": 30, "discount": 0},
+    {"type": "광랜", "gift_card": 25, "discount": 0}
+  ],
+  "notes": "기타 특이사항"
+}
+
+숫자는 만원 단위입니다. 점선(...)이나 빈 셀은 null로 표시하세요. 모든 구간을 빠짐없이 추출하세요."""
+
+
+def extract_policy_from_image(image_path, category='bundle'):
+    """Claude Vision API로 정책 이미지에서 데이터 추출"""
+    if not ANTHROPIC_AVAILABLE:
+        return None, "anthropic 라이브러리 미설치 (pip install anthropic)"
+    if not ANTHROPIC_API_KEY:
+        return None, "ANTHROPIC_API_KEY 환경변수 미설정"
+
+    try:
+        with open(image_path, 'rb') as f:
+            image_data = base64.b64encode(f.read()).decode('utf-8')
+
+        ext = os.path.splitext(image_path)[1].lower().lstrip('.')
+        media_type = {'jpg': 'image/jpeg', 'jpeg': 'image/jpeg', 'png': 'image/png'}.get(ext, 'image/jpeg')
+
+        client = _anthropic_lib.Anthropic(api_key=ANTHROPIC_API_KEY)
+        response = client.messages.create(
+            model="claude-opus-4-6",
+            max_tokens=8000,
+            messages=[{
+                "role": "user",
+                "content": [
+                    {"type": "image", "source": {"type": "base64", "media_type": media_type, "data": image_data}},
+                    {"type": "text", "text": EXTRACTION_PROMPT}
+                ]
+            }]
+        )
+
+        text = response.content[0].text.strip()
+        # 마크다운 코드블록 제거
+        if '```' in text:
+            parts = text.split('```')
+            for part in parts:
+                part = part.strip()
+                if part.startswith('json'):
+                    part = part[4:]
+                try:
+                    return json.loads(part.strip()), None
+                except Exception:
+                    continue
+        return json.loads(text), None
+
+    except json.JSONDecodeError as e:
+        return None, f"JSON 파싱 오류: {e}"
+    except Exception as e:
+        return None, f"추출 오류: {e}"
+
+
+# 요금대 이름 → ID 변환
+FEE_TIER_MAP = {
+    '20천원이상': ('over_20k', 20000),
+    '18천원이상': ('over_18k', 18000),
+    '15천원이상': ('over_15k', 15000),
+    '12천원이상': ('over_12k', 12000),
+    '10천원이상': ('over_10k', 10000),
+    '10천원미만': ('under_10k', 0),
+}
+
+
+def update_policies_from_extracted(policies, category, extracted):
+    """추출된 데이터로 policies.json 업데이트"""
+    if category == 'bundle' and 'internet' in extracted:
+        rows = []
+        for row in extracted['internet'].get('rows', []):
+            tier = row.get('tier', '').replace(' ', '')
+            tier_id, _ = FEE_TIER_MAP.get(tier, (tier.lower(), 0))
+            data = {
+                'maintain': {},
+                'upgrade': {},
+                'middle': {},
+                'lowest': {},
+                'standalone': {}
+            }
+            # 유지
+            if row.get('maintain_unified') is not None:
+                data['maintain']['unified'] = {'gift_card': row['maintain_unified'] or 0, 'iptv': 0}
+            if row.get('maintain_wifi_plus') is not None:
+                data['maintain']['wifi_plus'] = {'gift_card': row['maintain_wifi_plus'] or 0, 'iptv': 0}
+            # 상향
+            if row.get('upgrade_1g') is not None:
+                data['upgrade']['1g'] = {'gift_card': row['upgrade_1g'] or 0, 'iptv': 0}
+            if row.get('upgrade_500m') is not None:
+                data['upgrade']['500m'] = {'gift_card': row['upgrade_500m'] or 0, 'iptv': 0}
+            if row.get('upgrade_gwanglan') is not None:
+                data['upgrade']['gwanglan'] = {'gift_card': row['upgrade_gwanglan'] or 0, 'iptv': 0}
+            # 인증 특화
+            if row.get('certified_1g') is not None:
+                data['upgrade']['certified_1g'] = {'gift_card': row['certified_1g'] or 0, 'iptv': 0, 'notes': '인증특화'}
+            if row.get('certified_gwanglan') is not None:
+                data['upgrade']['certified_gwanglan'] = {'gift_card': row['certified_gwanglan'] or 0, 'iptv': 0, 'notes': '인증특화'}
+            # 중간/최저/단독
+            if row.get('middle_half_price') is not None:
+                data['middle']['half_price'] = {'gift_card': row['middle_half_price'] or 0, 'iptv': 0}
+            if row.get('lowest_special') is not None:
+                data['lowest']['special'] = {'gift_card': row['lowest_special'] or 0, 'iptv': 0}
+            if row.get('standalone') is not None:
+                data['standalone']['internet_only'] = {'gift_card': row['standalone'] or 0, 'iptv': 0}
+
+            rows.append({'id': tier_id, 'name': tier, 'data': data})
+
+        if rows:
+            policies['bundle_retention_matrix']['rows'] = rows
+
+    # 동등결합 업데이트
+    if 'equal_bundle' in extracted:
+        eq_list = extracted['equal_bundle']
+        if eq_list:
+            type_map = {'홀기': 'maintain', '유지': 'maintain', '기라': 'upgrade',
+                        '변경': 'upgrade', '광랜': 'discount', '할인': 'discount'}
+            cats = []
+            for item in eq_list:
+                t = item.get('type', '')
+                cat_id = type_map.get(t, t.lower().replace(' ', '_'))
+                cats.append({
+                    'id': cat_id,
+                    'name': t,
+                    'gift_card': item.get('gift_card', 0) or 0,
+                    'discount': item.get('discount', 0) or 0
+                })
+            policies['equal_bundle']['categories'] = cats
+
+    # metadata 버전 업데이트
+    if extracted.get('version') and 'metadata' in policies:
+        policies['metadata']['version'] = extracted['version']
+
+    return policies
+
+
+def build_excel_from_policies(policies_data):
+    """policies.json → flat Excel (openpyxl)"""
+    if not OPENPYXL_AVAILABLE:
+        return None, "openpyxl 미설치"
+
+    from openpyxl.styles import Font, PatternFill, Alignment
+    wb = openpyxl.Workbook()
+
+    # ── 시트1: 번들재약정 ──────────────────────────────────────
+    ws1 = wb.active
+    ws1.title = '번들재약정'
+    headers = ['판가구간', '방어정책', '세부상품', '상품권(만원)', 'IPTV혜택(만원)', '비고']
+    ws1.append(headers)
+    for cell in ws1[1]:
+        cell.font = Font(bold=True)
+        cell.fill = PatternFill("solid", fgColor="D0D0D0")
+
+    ACTION_LABEL = {
+        'maintain': '유지', 'upgrade': '상향', 'middle': '중간요금제',
+        'lowest': '최저요금제', 'standalone': '단독전환'
+    }
+    SUB_LABEL = {
+        'unified': '통일요금/WiFi상향', 'wifi_plus': 'WiFi+',
+        '1g': '1G(기가)', '500m': '500M', 'gwanglan': '광랜',
+        'certified_1g': '1G(인증특화)', 'certified_gwanglan': '광랜(인증특화)',
+        'half_price': '반값요금', 'special': '특화요금', 'internet_only': '인터넷단독'
+    }
+
+    for row in policies_data.get('bundle_retention_matrix', {}).get('rows', []):
+        for action, sub_dict in row.get('data', {}).items():
+            for sub_id, vals in sub_dict.items():
+                ws1.append([
+                    row.get('name', ''),
+                    ACTION_LABEL.get(action, action),
+                    SUB_LABEL.get(sub_id, sub_id),
+                    vals.get('gift_card', 0),
+                    vals.get('iptv', 0),
+                    vals.get('notes', '')
+                ])
+
+    # ── 시트2: 디지털재약정 ──────────────────────────────────────
+    ws2 = wb.create_sheet('디지털재약정')
+    ws2.append(['상품명', '요금대', '유지_상품권', '유지_할인', '상향_상품권', '상향_할인', '비고'])
+    for cell in ws2[1]:
+        cell.font = Font(bold=True)
+        cell.fill = PatternFill("solid", fgColor="D0D0D0")
+    for prod in policies_data.get('digital_renewal', {}).get('main_products', []):
+        ws2.append([
+            prod.get('name', ''), str(prod.get('monthly_fee', '')) + '만원',
+            prod.get('benefits', {}).get('maintain', {}).get('gift_card', 0),
+            prod.get('benefits', {}).get('maintain', {}).get('discount', 0),
+            prod.get('benefits', {}).get('upgrade', {}).get('gift_card', 0),
+            prod.get('benefits', {}).get('upgrade', {}).get('discount', 0),
+            '주상품'
+        ])
+    for prod in policies_data.get('digital_renewal', {}).get('sub_products', []):
+        ws2.append([
+            prod.get('name', ''), str(prod.get('monthly_fee', '')) + '만원',
+            prod.get('gift_card', 0), 0, prod.get('gift_card', 0), 0, '복수형'
+        ])
+
+    # ── 시트3: 동등결합 ──────────────────────────────────────
+    ws3 = wb.create_sheet('동등결합')
+    ws3.append(['구분', '상품권(만원)', '월할인(만원)', '설명'])
+    for cell in ws3[1]:
+        cell.font = Font(bold=True)
+        cell.fill = PatternFill("solid", fgColor="D0D0D0")
+    for cat in policies_data.get('equal_bundle', {}).get('categories', []):
+        ws3.append([cat.get('name', ''), cat.get('gift_card', 0), cat.get('discount', 0), cat.get('description', '')])
+
+    # ── 시트4: 단독(D단독) ──────────────────────────────────────
+    ws4 = wb.create_sheet('D단독')
+    ws4.append(['요금대', '유지_상품권', '변경_상품권', '할인적용_상품권', '할인적용_월할인', '약정변경_상품권'])
+    for cell in ws4[1]:
+        cell.font = Font(bold=True)
+        cell.fill = PatternFill("solid", fgColor="D0D0D0")
+    for tier in policies_data.get('d_standalone', {}).get('price_tiers', []):
+        p = tier.get('policies', {})
+        ws4.append([
+            tier.get('name', ''),
+            p.get('maintain', {}).get('gift_card', 0),
+            p.get('change', {}).get('gift_card', 0),
+            p.get('discount_apply', {}).get('gift_card', 0),
+            p.get('discount_apply', {}).get('discount', 0),
+            p.get('contract_change', {}).get('gift_card', 0)
+        ])
+
+    # ── 시트5: 요금인상Care ──────────────────────────────────────
+    ws5 = wb.create_sheet('요금인상Care')
+    care = policies_data.get('price_increase_care', {})
+    ws5.append(['항목', '내용'])
+    ws5.append(['대상', ', '.join(care.get('targets', []))])
+    ws5.append(['추가 혜택', f"+{care.get('benefits', {}).get('gift_card_bonus', 0)}만원"])
+    ws5.append(['설명', care.get('description', '')])
+
+    # 열 너비 자동 조정
+    for ws in [ws1, ws2, ws3, ws4, ws5]:
+        for col in ws.columns:
+            max_len = max((len(str(cell.value or '')) for cell in col), default=0)
+            ws.column_dimensions[col[0].column_letter].width = min(max_len + 4, 40)
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    return buf, None
+
 
 app = Flask(__name__)
 CORS(app)
@@ -463,6 +785,22 @@ def upload_image():
             'timestamp': datetime.now().isoformat()
         })
 
+        # ── Claude Vision으로 정책 데이터 자동 추출 ──────────────
+        extraction_result = None
+        extraction_error = None
+        if ANTHROPIC_AVAILABLE and ANTHROPIC_API_KEY:
+            extracted, ext_err = extract_policy_from_image(save_path, category)
+            if extracted:
+                policies = update_policies_from_extracted(policies, category, extracted)
+                policies['metadata']['last_updated'] = datetime.now().strftime('%Y-%m-%d')
+                with open(POLICIES_JSON_PATH, 'w', encoding='utf-8') as f:
+                    json.dump(policies, f, ensure_ascii=False, indent=2)
+                extraction_result = extracted
+                print(f"✅ 정책 데이터 자동 추출 완료: {safe_name}")
+            else:
+                extraction_error = ext_err
+                print(f"⚠️ 정책 데이터 추출 실패: {ext_err}")
+
         # 자동 git push → Vercel 자동 재배포 트리거
         git_pushed = False
         git_error = None
@@ -470,6 +808,13 @@ def upload_image():
             git_pushed, git_error = git_push_image(safe_name)
 
         msg = f'이미지가 저장되었습니다: {safe_name}'
+        if extraction_result:
+            msg += '\n\n정책 데이터가 자동으로 추출되어 반영되었습니다.'
+        elif extraction_error:
+            msg += f'\n\n⚠️ 정책 데이터 자동 추출 실패: {extraction_error}'
+        else:
+            msg += '\n\n(ANTHROPIC_API_KEY를 설정하면 정책 데이터가 자동 추출됩니다)'
+
         if git_pushed:
             msg += '\n\nGitHub에 자동 반영되었습니다. Vercel 재배포 후 (약 1~2분) 사이트에 표시됩니다.'
         elif AUTO_GIT_PUSH:
@@ -480,7 +825,9 @@ def upload_image():
             'message': msg,
             'image': new_image,
             'path': web_path,
-            'git_pushed': git_pushed
+            'git_pushed': git_pushed,
+            'extraction': extraction_result,
+            'extraction_error': extraction_error
         })
 
     except Exception as e:
@@ -911,10 +1258,104 @@ def parse_d_standalone(sheet, policy_data):
                 break
 
 
+# ========================================
+# 정책 이미지 → 데이터 추출 API
+# ========================================
+
+@app.route('/api/extract-policy', methods=['POST'])
+@check_ip_whitelist
+def extract_policy():
+    """업로드된 이미지에서 Claude Vision으로 정책 데이터 추출 후 policies.json 업데이트"""
+    data = request.json or {}
+    filename = data.get('filename', '')
+    category = data.get('category', 'bundle')
+
+    if not filename:
+        return jsonify({'error': '파일명이 필요합니다.'}), 400
+
+    # 파일 경로 결정
+    basename = os.path.basename(filename.replace('/assets/', ''))
+    image_path = os.path.join(PUBLIC_ASSETS_PATH, basename)
+
+    if not os.path.exists(image_path):
+        return jsonify({'error': f'이미지 파일을 찾을 수 없습니다: {basename}'}), 404
+
+    if not ANTHROPIC_AVAILABLE or not ANTHROPIC_API_KEY:
+        return jsonify({
+            'error': 'Claude Vision API를 사용할 수 없습니다.',
+            'reason': 'ANTHROPIC_API_KEY 환경변수를 설정하거나 pip install anthropic 을 실행하세요.'
+        }), 503
+
+    extracted, err = extract_policy_from_image(image_path, category)
+    if err:
+        return jsonify({'error': f'데이터 추출 실패: {err}'}), 500
+
+    # policies.json 업데이트
+    try:
+        with open(POLICIES_JSON_PATH, 'r', encoding='utf-8') as f:
+            policies = json.load(f)
+
+        policies = update_policies_from_extracted(policies, category, extracted)
+        policies['metadata']['last_updated'] = datetime.now().strftime('%Y-%m-%d')
+
+        with open(POLICIES_JSON_PATH, 'w', encoding='utf-8') as f:
+            json.dump(policies, f, ensure_ascii=False, indent=2)
+
+        # git push
+        if AUTO_GIT_PUSH:
+            try:
+                subprocess.run(['git', 'add', POLICIES_JSON_PATH], cwd=PROJECT_ROOT, capture_output=True, timeout=10)
+                subprocess.run(['git', 'commit', '-m', f'chore: 정책 데이터 자동 추출 업데이트 - {basename}'],
+                               cwd=PROJECT_ROOT, capture_output=True, timeout=10)
+                subprocess.run(['git', 'push', 'origin', 'main'], cwd=PROJECT_ROOT, capture_output=True, timeout=30)
+            except Exception:
+                pass
+
+        log_access({'action': 'POLICY_EXTRACTED', 'filename': basename, 'category': category,
+                    'timestamp': datetime.now().isoformat()})
+
+        return jsonify({'success': True, 'extracted': extracted,
+                        'message': '정책 데이터가 추출되어 policies.json에 반영되었습니다.'})
+
+    except Exception as e:
+        return jsonify({'error': f'policies.json 업데이트 실패: {str(e)}'}), 500
+
+
+@app.route('/api/export-excel', methods=['GET'])
+def export_excel():
+    """현재 policies.json 데이터를 Excel 파일로 내보내기"""
+    try:
+        with open(POLICIES_JSON_PATH, 'r', encoding='utf-8') as f:
+            policies = json.load(f)
+
+        buf, err = build_excel_from_policies(policies)
+        if err:
+            return jsonify({'error': err}), 500
+
+        version = policies.get('metadata', {}).get('version', 'v1')
+        date_str = datetime.now().strftime('%Y%m%d')
+        filename = f'리텐션정책_{version}_{date_str}.xlsx'
+
+        return send_file(
+            buf,
+            as_attachment=True,
+            download_name=filename,
+            mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        )
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
 @app.route('/api/health', methods=['GET'])
 def health_check():
     """서버 상태 확인"""
-    return jsonify({'status': 'ok', 'message': 'Flask server is running'})
+    return jsonify({
+        'status': 'ok',
+        'message': 'Flask server is running',
+        'xlwings': XLWINGS_AVAILABLE,
+        'vision_api': ANTHROPIC_AVAILABLE and bool(ANTHROPIC_API_KEY),
+        'excel_export': OPENPYXL_AVAILABLE
+    })
 
 
 @app.route('/api/access-logs', methods=['GET'])
