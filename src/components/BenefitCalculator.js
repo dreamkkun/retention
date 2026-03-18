@@ -1,506 +1,354 @@
 import React, { useState, useMemo } from 'react';
 import policiesData from '../data/policies.json';
+import { CONST_POLICY_DATA } from '../data/policyData';
 
-const policyRows = policiesData.policy_rows || [];
+// Use policies.json if populated, else fall back to CONST_POLICY_DATA
+const policyRows = (policiesData.policy_rows && policiesData.policy_rows.length > 0)
+  ? policiesData.policy_rows
+  : CONST_POLICY_DATA;
 
-// 인터넷 요금대 판정 → price_grp 문자열
-const getInternetPriceGrp = (price) => {
-  const p = parseInt(price);
-  if (isNaN(p) || p <= 0) return null;
-  if (p >= 20000) return '20천원 이상';
-  if (p >= 18000) return '18천원 이상';
-  if (p >= 15000) return '15천원 이상';
-  if (p >= 12000) return '12천원 이상';
-  if (p >= 10000) return '10천원 이상';
-  return '10천원 미만';
+// 인터넷 현재 요금 → price_grp
+const getInternetPriceGrp = (fee) => {
+  const p = parseInt(fee);
+  if (!p || p <= 0) return null;
+  if (p >= 20000) return '20천원이상';
+  if (p >= 18000) return '18천원이상';
+  if (p >= 15000) return '15천원이상';
+  if (p >= 12000) return '12천원이상';
+  if (p >= 10000) return '10천원이상';
+  return '10천원미만';
 };
 
-// D단독 TV 요금대 판정 → price_grp 문자열
-const getDStandalonePriceGrp = (price) => {
-  const p = parseInt(price);
-  if (isNaN(p) || p <= 0) return null;
-  if (p >= 14000) return '14천원 이상';
-  if (p >= 12000) return '12천원 이상';
-  if (p >= 8000) return '8천원 이상';
-  return '8천원 미만';
+// TV 현재 요금 → price_grp (디지털_주상품 UHD/HD)
+const getDigitalMainPriceGrp = (fee) => {
+  const p = parseInt(fee);
+  if (!p || p <= 0) return null;
+  if (p >= 13000) return '13천원이상';
+  if (p >= 10000) return '10천원이상';
+  if (p >= 7000) return '7천원이상';
+  return '7천원미만';
 };
 
-// planAction ID → 정책_소분류 문자열 (번들/I단독)
-const BUNDLE_ACTION_MAP = {
-  maintain:  '요금제유지',
-  upgrade:   '요금제상향',
-  middle:    '중간요금제',
-  lowest:    '최저요금제',
-  standalone: '단독전환',
+// TV 현재 요금 → price_grp (디지털_복수형 UHD/HD)
+const getDigitalMultiPriceGrp = (fee) => {
+  const p = parseInt(fee);
+  if (!p || p <= 0) return null;
+  if (p >= 8000) return '8천원이상';
+  if (p >= 5000) return '5천원이상';
+  return '5천원미만';
 };
 
-// planAction ID → 정책_소분류 문자열 (번들(특화))
-const BUNDLE2_ACTION_MAP = {
-  maintain:        '요금제 유지',
-  change:          '요금제 변경',
-  discount:        '할인 적용',
-  contract_change: '약정 변경',
-};
+const POLICY_TYPES = [
+  { id: '인터넷번들_재약정', label: '인터넷 번들 재약정', desc: '인터넷+TV 번들 고객' },
+  { id: '인터넷단독_재약정', label: '인터넷 단독 재약정', desc: '인터넷만 이용 고객' },
+  { id: '디지털번들_재약정', label: '디지털 번들 재약정', desc: '번들 TV 고객' },
+];
 
-// planAction ID → 정책_소분류 문자열 (D단독)
-const DSTANDALONE_ACTION_MAP = {
-  maintain:        '유지',
-  change:          '변경',
-  discount_apply:  '할인적용',
-  contract_change: '약정변경',
-};
+const fmt = (n) => n != null ? `${Number(n).toLocaleString()}원` : '-';
 
 const BenefitCalculator = () => {
-  const [customerType, setCustomerType] = useState('bundle'); // bundle, bundle2, d_standalone, i_standalone
+  const [policyType, setPolicyType] = useState('');
+  const [svcType, setSvcType] = useState('');   // 디지털_주상품 | 디지털_복수형
   const [internetFee, setInternetFee] = useState('');
-  const [digitalFee, setDigitalFee] = useState('');
-  const [planAction, setPlanAction] = useState('');
-  const [subOption, setSubOption] = useState(''); // 상품군 값
-  const [isPriceIncreaseCare, setIsPriceIncreaseCare] = useState(false);
-  const [valueType, setValueType] = useState(''); // 후번들, UHD전환, 업셀링
+  const [tvFee, setTvFee] = useState('');
+  const [product, setProduct] = useState('');    // 상품군
+  const [jungbong, setJungbong] = useState('');  // 정책_중분류
+  const [sobong, setSobong] = useState('');      // 정책_소분류
 
-  const handleCustomerTypeChange = (v) => {
-    setCustomerType(v);
-    setPlanAction('');
-    setSubOption('');
-    setValueType('');
+  const resetBelow = (level) => {
+    if (level <= 0) { setSvcType(''); }
+    if (level <= 1) { setProduct(''); }
+    if (level <= 2) { setJungbong(''); }
+    if (level <= 3) { setSobong(''); }
   };
 
-  // 번들/I단독: planAction에 따른 사용 가능한 상품군 목록
-  const bundleSubOptions = useMemo(() => {
-    if (customerType !== 'bundle' && customerType !== 'i_standalone') return [];
-    if (!planAction) return [];
-    const 소분류 = BUNDLE_ACTION_MAP[planAction];
-    if (!소분류) return [];
-    const rows = policyRows.filter(r =>
-      r['단독_번들여부'] === '번들' &&
-      r['정책_대분류'] === '번들' &&
-      r['정책_소분류'] === 소분류
-    );
-    const seen = new Set();
-    const result = [];
-    for (const r of rows) {
-      const sg = r['상품군'];
-      if (sg && !seen.has(sg)) {
-        seen.add(sg);
-        result.push({ id: sg, name: sg });
-      }
-    }
-    return result;
-  }, [customerType, planAction]);
+  const handlePolicyType = (v) => { setPolicyType(v); resetBelow(0); };
+  const handleSvcType   = (v) => { setSvcType(v);   resetBelow(1); };
+  const handleProduct   = (v) => { setProduct(v);   resetBelow(2); };
+  const handleJungbong  = (v) => { setJungbong(v);  resetBelow(3); };
 
-  // 번들/I단독 혜택 계산
-  const calcBundleBenefit = useMemo(() => {
-    if (customerType !== 'bundle' && customerType !== 'i_standalone') return null;
-    if (!planAction) return null;
-    const priceGrp = getInternetPriceGrp(internetFee);
-    if (!priceGrp) return null;
-    const 소분류 = BUNDLE_ACTION_MAP[planAction];
-    if (!소분류) return null;
-    // 상품군 지정 없으면 해당 소분류의 첫 번째 row 사용
-    const rows = policyRows.filter(r =>
-      r['단독_번들여부'] === '번들' &&
-      r['정책_대분류'] === '번들' &&
-      r['price_grp'] === priceGrp &&
-      r['정책_소분류'] === 소분류 &&
-      (!subOption || r['상품군'] === subOption)
-    );
-    if (rows.length === 0) return null;
-    const row = rows[0];
-    return {
-      giftCard: row['사은품혜택'] || 0,
-      discount: row['요금할인액'] || 0,
-      segment: priceGrp,
-      상품군: row['상품군'],
-    };
-  }, [customerType, internetFee, planAction, subOption]);
-
-  // 번들(특화) 혜택 계산
-  const calcBundle2Benefit = useMemo(() => {
-    if (customerType !== 'bundle2') return null;
-    if (!planAction) return null;
-    const 소분류 = BUNDLE2_ACTION_MAP[planAction];
-    if (!소분류) return null;
-    const rows = policyRows.filter(r =>
-      r['정책_대분류'] === '번들(특화)' &&
-      r['정책_소분류'] === 소분류
-    );
-    if (rows.length === 0) return null;
-    const row = rows[0];
-    return {
-      giftCard: row['사은품혜택'] || 0,
-      discount: row['요금할인액'] || 0,
-      name: 소분류,
-    };
-  }, [customerType, planAction]);
-
-  // D단독 혜택 계산
-  const calcDStandaloneBenefit = useMemo(() => {
-    if (customerType !== 'd_standalone') return null;
-    if (!planAction) return null;
-    const priceGrp = getDStandalonePriceGrp(digitalFee);
-    if (!priceGrp) return null;
-    const 소분류 = DSTANDALONE_ACTION_MAP[planAction];
-    if (!소분류) return null;
-    const rows = policyRows.filter(r =>
-      r['svc_type'] === 'TV' &&
-      r['단독_번들여부'] === '단독' &&
-      r['price_grp'] === priceGrp &&
-      r['정책_소분류'] === 소분류
-    );
-    if (rows.length === 0) return null;
-    const row = rows[0];
-    return {
-      giftCard: row['사은품혜택'] || 0,
-      discount: row['요금할인액'] || 0,
-      segment: priceGrp,
-    };
-  }, [customerType, digitalFee, planAction]);
-
-  // 요금인상Care 추가 혜택
-  const careBonus = useMemo(() => {
-    if (!isPriceIncreaseCare) return 0;
-    const row = policyRows.find(r => r['정책_대분류'] === '요금인상Care');
-    if (row) return row['사은품혜택'] || 0;
-    return policiesData.price_increase_care?.benefits?.gift_card_bonus || 2;
-  }, [isPriceIncreaseCare]);
-
-  // 가치제고 추가 혜택
-  const calcValueBenefit = useMemo(() => {
-    if (!valueType) return null;
-    if (valueType === '후번들') {
-      const rows = policyRows.filter(r =>
-        r['정책_대분류'] === '가치제고' &&
-        r['정책_중분류'] === '후번들'
-      ).sort((a, b) => (a['사은품혜택'] || 0) - (b['사은품혜택'] || 0));
-      const min = rows[0]?.['사은품혜택'] || 5;
-      return {
-        type: '후번들',
-        note: `회선 추가: 1회선+${rows[0]?.['사은품혜택'] || 5}만원 / 2회선+${rows[1]?.['사은품혜택'] || 10}만원 / 3회선+${rows[2]?.['사은품혜택'] || 15}만원`,
-        giftCard: min,
-      };
-    }
-    if (valueType === 'UHD전환') {
-      const row = policyRows.find(r =>
-        r['정책_대분류'] === '가치제고' &&
-        r['정책_중분류'] === 'UHD전환'
-      );
-      const gift = row?.['사은품혜택'] ?? 25;
-      const disc = row?.['요금할인액'] ?? 7;
-      return {
-        type: 'UHD전환',
-        note: `UHD 업그레이드: 상품권 ${gift}만원 + 월 할인 ${disc}만원`,
-        giftCard: gift,
-        discount: disc,
-      };
-    }
-    if (valueType === '업셀링') {
-      const row = policyRows.find(r =>
-        r['정책_대분류'] === '가치제고' &&
-        r['정책_중분류'] === '업셀링'
-      );
-      const gift = row?.['사은품혜택'] ?? 2;
-      const disc = row?.['요금할인액'] ?? 2;
-      return {
-        type: '업셀링',
-        note: `요금제 상향: 상품권 ${gift}만원 + 월 할인 ${disc}만원`,
-        giftCard: gift,
-        discount: disc,
-      };
+  // Derived price_grp
+  const priceGrp = useMemo(() => {
+    if (policyType === '인터넷번들_재약정') return getInternetPriceGrp(internetFee);
+    if (policyType === '디지털번들_재약정' && product && product !== 'IPTV') {
+      if (svcType === '디지털_주상품') return getDigitalMainPriceGrp(tvFee);
+      if (svcType === '디지털_복수형') return getDigitalMultiPriceGrp(tvFee);
     }
     return null;
-  }, [valueType]);
+  }, [policyType, svcType, product, internetFee, tvFee]);
 
-  // 최종 결과 집계
-  const result = useMemo(() => {
-    if (customerType === 'bundle' || customerType === 'i_standalone') {
-      if (!calcBundleBenefit) return null;
-      const base = calcBundleBenefit.giftCard;
-      const totalGiftCard = base + careBonus + (calcValueBenefit?.giftCard || 0);
-      const totalDiscount = (calcBundleBenefit.discount || 0) + (calcValueBenefit?.discount || 0);
-      return { base, careBonus, valuePart: calcValueBenefit, totalGiftCard, totalDiscount,
-               segment: calcBundleBenefit.segment };
-    }
-    if (customerType === 'bundle2') {
-      if (!calcBundle2Benefit) return null;
-      const base = calcBundle2Benefit.giftCard;
-      const totalGiftCard = base + careBonus;
-      return { base, careBonus, totalGiftCard, totalDiscount: calcBundle2Benefit.discount || 0,
-               segment: calcBundle2Benefit.name };
-    }
-    if (customerType === 'd_standalone') {
-      if (!calcDStandaloneBenefit) return null;
-      const base = calcDStandaloneBenefit.giftCard;
-      const totalGiftCard = base + careBonus;
-      return { base, careBonus, totalGiftCard, totalDiscount: calcDStandaloneBenefit.discount || 0,
-               segment: calcDStandaloneBenefit.segment };
-    }
-    return null;
-  }, [customerType, calcBundleBenefit, calcBundle2Benefit, calcDStandaloneBenefit,
-      calcValueBenefit, careBonus]);
+  // Row pool after applying all current selections
+  const filteredRows = useMemo(() => {
+    if (!policyType) return [];
+    let rows = policyRows.filter(r => r['정책_대분류'] === policyType);
 
-  const totalFee = (parseInt(internetFee) || 0) + (parseInt(digitalFee) || 0);
-  const internetPriceGrp = getInternetPriceGrp(internetFee);
-  const dstandalonePriceGrp = getDStandalonePriceGrp(digitalFee);
+    if (policyType === '인터넷번들_재약정') {
+      if (priceGrp) rows = rows.filter(r => r['price_grp'] === priceGrp);
+    } else if (policyType === '인터넷단독_재약정') {
+      if (product) rows = rows.filter(r => r['상품군'] === product);
+    } else if (policyType === '디지털번들_재약정') {
+      if (svcType)  rows = rows.filter(r => r['svc_type'] === svcType);
+      if (product)  rows = rows.filter(r => r['상품군'] === product);
+      if (priceGrp) rows = rows.filter(r => r['price_grp'] === priceGrp);
+    }
+    return rows;
+  }, [policyType, svcType, product, priceGrp]);
+
+  // Available 상품군 choices
+  const availableProducts = useMemo(() => {
+    if (!policyType) return [];
+    let rows = policyRows.filter(r => r['정책_대분류'] === policyType);
+    if (policyType === '디지털번들_재약정' && svcType) {
+      rows = rows.filter(r => r['svc_type'] === svcType);
+    }
+    return [...new Set(rows.map(r => r['상품군']).filter(Boolean))];
+  }, [policyType, svcType]);
+
+  // Available 중분류
+  const availableJungbong = useMemo(() => {
+    return [...new Set(filteredRows.map(r => r['정책_중분류']).filter(Boolean))];
+  }, [filteredRows]);
+
+  // Available 소분류 (filtered further by 중분류)
+  const availableSobong = useMemo(() => {
+    if (!jungbong) return [];
+    return [...new Set(
+      filteredRows
+        .filter(r => r['정책_중분류'] === jungbong)
+        .map(r => r['정책_소분류'])
+        .filter(Boolean)
+    )];
+  }, [filteredRows, jungbong]);
+
+  // Final matched row
+  const matchedRow = useMemo(() => {
+    if (!jungbong || !sobong) return null;
+    return filteredRows.find(r =>
+      r['정책_중분류'] === jungbong && r['정책_소분류'] === sobong
+    ) || null;
+  }, [filteredRows, jungbong, sobong]);
+
+  const needTvFee = policyType === '디지털번들_재약정' && svcType && product && product !== 'IPTV';
+  const needInternetFee = policyType === '인터넷번들_재약정';
+  const needProduct = policyType === '인터넷단독_재약정' || policyType === '디지털번들_재약정';
+  const needSvcType = policyType === '디지털번들_재약정';
 
   return (
     <div className="max-w-4xl">
       <div className="bg-gray-100 border border-gray-300 p-6 mb-6">
         <h2 className="text-xl font-bold text-gray-800 mb-4">맞춤형 혜택 계산기</h2>
 
-        {/* 고객 유형 */}
+        {/* ① 정책 유형 */}
         <div className="mb-4">
-          <label className="block text-sm font-semibold text-gray-700 mb-2">고객 유형</label>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-            {[
-              { id: 'bundle',       label: '번들 고객',    desc: '인터넷+TV' },
-              { id: 'bundle2',      label: '번들(특화)',   desc: '동등결합' },
-              { id: 'i_standalone', label: 'I단독 고객',  desc: '인터넷만' },
-              { id: 'd_standalone', label: 'D단독 고객',  desc: 'TV만' },
-            ].map(ct => (
+          <label className="block text-sm font-semibold text-gray-700 mb-2">① 정책 유형</label>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+            {POLICY_TYPES.map(pt => (
               <button
-                key={ct.id}
-                onClick={() => handleCustomerTypeChange(ct.id)}
-                className={`px-3 py-2 border rounded text-sm transition-colors ${
-                  customerType === ct.id
+                key={pt.id}
+                onClick={() => handlePolicyType(pt.id)}
+                className={`px-3 py-2 border rounded text-sm text-left transition-colors ${
+                  policyType === pt.id
                     ? 'bg-gray-700 text-white border-gray-700'
                     : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
                 }`}
               >
-                <div className="font-semibold">{ct.label}</div>
-                <div className="text-xs opacity-70">{ct.desc}</div>
+                <div className="font-semibold">{pt.label}</div>
+                <div className="text-xs opacity-70">{pt.desc}</div>
               </button>
             ))}
           </div>
         </div>
 
-        {/* 요금 입력 */}
-        <div className="grid md:grid-cols-2 gap-4 mb-4">
-          <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-2">
-              인터넷 현재 요금 (원)
-            </label>
+        {/* ② 인터넷 요금 (번들) */}
+        {needInternetFee && (
+          <div className="mb-4">
+            <label className="block text-sm font-semibold text-gray-700 mb-2">② 인터넷 현재 요금 (원)</label>
             <input
               type="number"
               value={internetFee}
-              onChange={e => setInternetFee(e.target.value)}
+              onChange={e => { setInternetFee(e.target.value); resetBelow(2); }}
               className="w-full px-3 py-2 border border-gray-300 focus:border-gray-500 focus:outline-none"
               placeholder="예: 21000"
-              disabled={customerType === 'd_standalone'}
             />
-            {internetFee && internetPriceGrp && customerType !== 'd_standalone' && (
+            {priceGrp && (
               <div className="mt-1 text-sm bg-blue-50 border border-blue-200 text-blue-800 px-3 py-1">
-                판정: <span className="font-bold">{internetPriceGrp}</span>
+                요금대 판정: <span className="font-bold">{priceGrp}</span>
               </div>
             )}
           </div>
-          <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-2">
-              디지털(TV) 현재 요금 (원)
-            </label>
+        )}
+
+        {/* ② 디지털 가입 유형 */}
+        {needSvcType && (
+          <div className="mb-4">
+            <label className="block text-sm font-semibold text-gray-700 mb-2">② 가입 유형</label>
+            <div className="grid grid-cols-2 gap-2">
+              {[
+                { id: '디지털_주상품', label: '주상품', desc: 'TV 1대' },
+                { id: '디지털_복수형', label: '복수형', desc: 'TV 2대 이상' },
+              ].map(st => (
+                <button
+                  key={st.id}
+                  onClick={() => handleSvcType(st.id)}
+                  className={`px-3 py-2 border rounded text-sm transition-colors ${
+                    svcType === st.id
+                      ? 'bg-gray-700 text-white border-gray-700'
+                      : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+                  }`}
+                >
+                  <div className="font-semibold">{st.label}</div>
+                  <div className="text-xs opacity-70">{st.desc}</div>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* ③ 상품군 */}
+        {needProduct && availableProducts.length > 0 && (
+          <div className="mb-4">
+            <label className="block text-sm font-semibold text-gray-700 mb-2">③ 상품군</label>
+            <div className="flex flex-wrap gap-2">
+              {availableProducts.map(p => (
+                <button
+                  key={p}
+                  onClick={() => handleProduct(p)}
+                  className={`px-4 py-1.5 border rounded text-sm transition-colors ${
+                    product === p
+                      ? 'bg-blue-600 text-white border-blue-600'
+                      : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+                  }`}
+                >{p}</button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* TV 요금 (디지털 UHD/HD) */}
+        {needTvFee && (
+          <div className="mb-4">
+            <label className="block text-sm font-semibold text-gray-700 mb-2">④ TV 현재 요금 (원)</label>
             <input
               type="number"
-              value={digitalFee}
-              onChange={e => setDigitalFee(e.target.value)}
+              value={tvFee}
+              onChange={e => { setTvFee(e.target.value); resetBelow(2); }}
               className="w-full px-3 py-2 border border-gray-300 focus:border-gray-500 focus:outline-none"
-              placeholder="예: 14300"
-              disabled={customerType === 'i_standalone'}
+              placeholder="예: 13000"
             />
-            {digitalFee && dstandalonePriceGrp && customerType === 'd_standalone' && (
+            {priceGrp && (
               <div className="mt-1 text-sm bg-blue-50 border border-blue-200 text-blue-800 px-3 py-1">
-                판정: <span className="font-bold">{dstandalonePriceGrp}</span>
+                요금대 판정: <span className="font-bold">{priceGrp}</span>
               </div>
             )}
           </div>
-        </div>
+        )}
 
-        {(internetFee || digitalFee) && (
-          <div className="bg-white border border-gray-400 p-3 mb-4">
-            <div className="flex justify-between items-center">
-              <span className="text-sm font-semibold text-gray-700">합산 금액</span>
-              <span className="text-xl font-bold text-gray-800">{totalFee.toLocaleString()}원</span>
+        {/* 정책 중분류 */}
+        {availableJungbong.length > 0 && (
+          <div className="mb-4">
+            <label className="block text-sm font-semibold text-gray-700 mb-2">정책 중분류</label>
+            <div className="flex flex-wrap gap-2">
+              {availableJungbong.map(j => (
+                <button
+                  key={j}
+                  onClick={() => handleJungbong(j)}
+                  className={`px-4 py-1.5 border rounded text-sm transition-colors ${
+                    jungbong === j
+                      ? 'bg-green-600 text-white border-green-600'
+                      : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+                  }`}
+                >{j}</button>
+              ))}
             </div>
           </div>
         )}
 
-        {/* 요금인상Care 체크 */}
-        <div className="mb-4 bg-red-50 border border-red-200 px-4 py-3 rounded">
-          <label className="flex items-center cursor-pointer">
-            <input
-              type="checkbox"
-              checked={isPriceIncreaseCare}
-              onChange={e => setIsPriceIncreaseCare(e.target.checked)}
-              className="mr-2"
-            />
-            <span className="text-sm font-semibold text-red-800">
-              요금인상Care 고객 (+{careBonus || (policiesData.price_increase_care?.benefits?.gift_card_bonus || 2)}만원 추가)
-            </span>
-          </label>
-          <p className="text-xs text-red-600 ml-5 mt-1">2026년 요금인상 대상 고객 또는 불만/해지 의사 표현 고객</p>
-        </div>
-
-        {/* 요금제 변경 여부 */}
-        <div className="mb-4">
-          <label className="block text-sm font-semibold text-gray-700 mb-2">요금제 변경 여부</label>
-          {(customerType === 'bundle' || customerType === 'i_standalone') && (
-            <select
-              value={planAction}
-              onChange={e => { setPlanAction(e.target.value); setSubOption(''); }}
-              className="w-full px-3 py-2 border border-gray-300 bg-white focus:border-gray-500 focus:outline-none"
-            >
-              <option value="">선택하세요</option>
-              <option value="maintain">요금제 유지</option>
-              <option value="upgrade">요금제 상향</option>
-              <option value="middle">중간요금제</option>
-              <option value="lowest">최저요금제</option>
-              <option value="standalone">단독전환</option>
-            </select>
-          )}
-          {customerType === 'bundle2' && (
-            <select
-              value={planAction}
-              onChange={e => setPlanAction(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 bg-white focus:border-gray-500 focus:outline-none"
-            >
-              <option value="">선택하세요</option>
-              <option value="maintain">요금제 유지</option>
-              <option value="change">요금제 변경</option>
-              <option value="discount">할인 적용</option>
-              <option value="contract_change">약정 변경</option>
-            </select>
-          )}
-          {customerType === 'd_standalone' && (
-            <select
-              value={planAction}
-              onChange={e => setPlanAction(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 bg-white focus:border-gray-500 focus:outline-none"
-            >
-              <option value="">선택하세요</option>
-              <option value="maintain">유지</option>
-              <option value="change">변경</option>
-              <option value="discount_apply">할인적용</option>
-              <option value="contract_change">약정변경</option>
-            </select>
-          )}
-        </div>
-
-        {/* 세부 옵션 (번들/I단독) */}
-        {(customerType === 'bundle' || customerType === 'i_standalone') && bundleSubOptions.length > 0 && (
+        {/* 정책 소분류 */}
+        {availableSobong.length > 0 && (
           <div className="mb-4">
-            <label className="block text-sm font-semibold text-gray-700 mb-2">세부 옵션 (상품군)</label>
-            <select
-              value={subOption}
-              onChange={e => setSubOption(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 bg-white focus:border-gray-500 focus:outline-none"
-            >
-              <option value="">선택하세요</option>
-              {bundleSubOptions.map(opt => (
-                <option key={opt.id} value={opt.id}>{opt.name}</option>
+            <label className="block text-sm font-semibold text-gray-700 mb-2">정책 소분류</label>
+            <div className="flex flex-wrap gap-2">
+              {availableSobong.map(s => (
+                <button
+                  key={s}
+                  onClick={() => setSobong(s)}
+                  className={`px-4 py-1.5 border rounded text-sm transition-colors ${
+                    sobong === s
+                      ? 'bg-orange-600 text-white border-orange-600'
+                      : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+                  }`}
+                >{s}</button>
               ))}
-            </select>
+            </div>
           </div>
         )}
-
-        {/* 가치제고 추가 혜택 */}
-        <div className="mb-4 bg-purple-50 border border-purple-200 px-4 py-3 rounded">
-          <label className="block text-sm font-semibold text-purple-800 mb-2">가치제고 추가 혜택 (선택)</label>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-            {[
-              { id: '', label: '해당없음' },
-              { id: '후번들', label: '후번들' },
-              { id: 'UHD전환', label: 'UHD전환' },
-              { id: '업셀링', label: '업셀링' },
-            ].map(vt => (
-              <button
-                key={vt.id}
-                onClick={() => setValueType(vt.id)}
-                className={`px-3 py-1.5 border rounded text-sm transition-colors ${
-                  valueType === vt.id
-                    ? 'bg-purple-700 text-white border-purple-700'
-                    : 'bg-white text-purple-700 border-purple-300 hover:bg-purple-50'
-                }`}
-              >
-                {vt.label}
-              </button>
-            ))}
-          </div>
-          {calcValueBenefit && (
-            <p className="text-xs text-purple-700 mt-2">{calcValueBenefit.note}</p>
-          )}
-        </div>
       </div>
 
-      {/* 계산 결과 */}
-      {result && (
-        <>
-          <div className="bg-white border-2 border-gray-400 p-6 mb-6">
-            <h3 className="text-lg font-bold text-gray-800 mb-4">계산 결과</h3>
-
-            <div className="space-y-2 mb-4 text-sm">
+      {/* 결과 패널 */}
+      {matchedRow && (
+        <div className="bg-white border-2 border-gray-400 p-6 mb-6">
+          <h3 className="text-lg font-bold text-gray-800 mb-4">계산 결과</h3>
+          <div className="space-y-2 text-sm">
+            <div className="flex justify-between items-center border border-gray-200 px-3 py-2 rounded bg-gray-50">
+              <span className="text-gray-600">정책 유형</span>
+              <span className="font-semibold">{matchedRow['정책_대분류']}</span>
+            </div>
+            {matchedRow['상품군'] && (
               <div className="flex justify-between items-center border border-gray-200 px-3 py-2 rounded bg-gray-50">
-                <span className="text-gray-600">요금대 / 구분</span>
-                <span className="font-semibold">{result.segment}</span>
+                <span className="text-gray-600">상품군</span>
+                <span className="font-semibold">{matchedRow['상품군']}</span>
               </div>
+            )}
+            {matchedRow['price_grp'] && (
               <div className="flex justify-between items-center border border-gray-200 px-3 py-2 rounded bg-gray-50">
-                <span className="text-gray-600">기본 상품권</span>
-                <span className="font-semibold">{result.base}만원</span>
+                <span className="text-gray-600">요금대</span>
+                <span className="font-semibold">{matchedRow['price_grp']}</span>
               </div>
-              {result.careBonus > 0 && (
-                <div className="flex justify-between items-center border border-red-200 px-3 py-2 rounded bg-red-50">
-                  <span className="text-red-700">요금인상Care 추가</span>
-                  <span className="font-semibold text-red-700">+{result.careBonus}만원</span>
-                </div>
-              )}
-              {result.valuePart && (
-                <div className="flex justify-between items-center border border-purple-200 px-3 py-2 rounded bg-purple-50">
-                  <span className="text-purple-700">가치제고 ({result.valuePart.type})</span>
-                  <span className="font-semibold text-purple-700">+{result.valuePart.giftCard}만원</span>
-                </div>
-              )}
+            )}
+            <div className="flex justify-between items-center border border-gray-200 px-3 py-2 rounded bg-gray-50">
+              <span className="text-gray-600">중분류 / 소분류</span>
+              <span className="font-semibold">
+                {matchedRow['정책_중분류']} / {matchedRow['정책_소분류']}
+              </span>
             </div>
 
-            <div className="border-t-2 border-gray-400 pt-4">
-              <div className="grid md:grid-cols-2 gap-4">
-                <div className="border-2 border-blue-500 p-4 bg-blue-50">
-                  <div className="text-sm text-blue-700 mb-1">총 상품권</div>
-                  <div className="text-3xl font-bold text-blue-800">{result.totalGiftCard}만원</div>
-                </div>
-                {result.totalDiscount > 0 && (
-                  <div className="border-2 border-green-500 p-4 bg-green-50">
-                    <div className="text-sm text-green-700 mb-1">총 월 할인</div>
-                    <div className="text-3xl font-bold text-green-800">{result.totalDiscount}만원</div>
-                  </div>
-                )}
-                {result.valuePart?.discount > 0 && (
-                  <div className="border-2 border-purple-500 p-4 bg-purple-50">
-                    <div className="text-sm text-purple-700 mb-1">가치제고 월 할인</div>
-                    <div className="text-3xl font-bold text-purple-800">{result.valuePart.discount}만원</div>
-                  </div>
-                )}
+            {matchedRow['정책판가'] != null && (
+              <div className="flex justify-between items-center border border-blue-200 px-3 py-2 rounded bg-blue-50">
+                <span className="text-blue-700 font-semibold">변경 요금</span>
+                <span className="font-bold text-blue-800 text-base">{fmt(matchedRow['정책판가'])}/월</span>
               </div>
-            </div>
-          </div>
+            )}
 
-          {/* 방어 멘트 */}
-          <div className="bg-gray-100 border border-gray-300 p-6">
-            <h3 className="text-lg font-bold text-gray-800 mb-3">방어 멘트</h3>
-            <div className="bg-white border border-gray-300 p-4 mb-3">
-              <div className="text-sm text-gray-600 mb-1">가치제안형</div>
-              <p className="text-gray-800">
-                고객님, 현재 {totalFee > 0 ? `${totalFee.toLocaleString()}원을 납부하고 계신데, ` : ''}
-                재약정 시 <strong>{result.totalGiftCard}만원</strong>의 상품권 혜택을 바로 받으실 수 있습니다!
-              </p>
+            <div className={`flex justify-between items-center border px-3 py-3 rounded ${
+              matchedRow['사은품혜택']
+                ? 'border-yellow-300 bg-yellow-50'
+                : 'border-gray-200 bg-gray-50'
+            }`}>
+              <span className={matchedRow['사은품혜택'] ? 'text-yellow-700 font-semibold' : 'text-gray-500'}>
+                사은품 혜택
+              </span>
+              <span className={`font-bold text-xl ${
+                matchedRow['사은품혜택'] ? 'text-yellow-800' : 'text-gray-400'
+              }`}>
+                {matchedRow['사은품혜택'] ? fmt(matchedRow['사은품혜택']) : '해당 없음'}
+              </span>
             </div>
-            {result.totalDiscount > 0 && (
-              <div className="bg-white border border-gray-300 p-4">
-                <div className="text-sm text-gray-600 mb-1">요금절감형</div>
-                <p className="text-gray-800">
-                  추가로 매월 <strong>{result.totalDiscount}만원</strong>씩 할인 혜택도 드립니다.
-                </p>
+
+            {matchedRow['요금할인액'] != null && matchedRow['요금할인액'] > 0 && (
+              <div className="flex justify-between items-center border border-green-200 px-3 py-2 rounded bg-green-50">
+                <span className="text-green-700">요금 할인</span>
+                <span className="font-bold text-green-800">{fmt(matchedRow['요금할인액'])}/월</span>
               </div>
             )}
           </div>
-        </>
+        </div>
+      )}
+
+      {/* 안내 문구 (아직 선택 전) */}
+      {!matchedRow && policyType && (
+        <div className="bg-gray-50 border border-dashed border-gray-300 p-6 text-center text-gray-500 text-sm">
+          위 옵션을 순서대로 선택하면 혜택이 계산됩니다.
+        </div>
       )}
     </div>
   );
