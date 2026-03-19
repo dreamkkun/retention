@@ -67,17 +67,6 @@ const DIGITAL_TV_COLS = [
   { j:'IPTV전환(상향)', b:'Pro라이트', s:'Pro라이트' },
 ];
 
-const DIGITAL_IPTV_LIST = [
-  { j:'동일요금',       b:'동일매체'  },
-  { j:'동일요금',       b:'UHD전환'   },
-  { j:'절충형',         b:'동일매체'  },
-  { j:'절충형',         b:'UHD전환'   },
-  { j:'채널하향',       b:'Pro라이트' },
-  { j:'채널하향',       b:'이코노미'  },
-  { j:'IPTV전환(상향)', b:'Pro맥스'   },
-  { j:'IPTV전환(상향)', b:'Pro라이트' },
-];
-
 // ── 중분류 그룹 구조 (span 계산용) ──────────────────────────────────────────
 const groupCols = (cols) => {
   const groups = [];
@@ -188,8 +177,8 @@ const MatrixTable = ({ rowKeys, rowLabel, cols, lookup, allRows, note }) => {
   );
 };
 
-// ── 디지털 IPTV 간단 목록 테이블 ─────────────────────────────────────────────
-const DigitalIPTVTable = ({ svcType }) => {
+// ── 디지털 IPTV 매트릭스 (요금대 무관 → 단일 행) ────────────────────────────
+const DigitalIPTVMatrix = ({ svcType }) => {
   const rows = useMemo(() =>
     policyRows.filter(r =>
       r['정책_대분류'] === '디지털단독_재약정' &&
@@ -197,39 +186,17 @@ const DigitalIPTVTable = ({ svcType }) => {
       r['상품군'] === 'IPTV'
     ), [svcType]);
 
+  const lookup = (_rk, j, b) =>
+    rows.find(r => r['정책_중분류'] === j && r['정책_소분류'] === b);
+
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full text-sm border-collapse border border-gray-300">
-        <thead>
-          <tr className="bg-gray-100">
-            <th className="border border-gray-300 px-3 py-2 text-left text-gray-700 font-semibold">중분류</th>
-            <th className="border border-gray-300 px-3 py-2 text-left text-gray-700 font-semibold">소분류</th>
-            <th className="border border-gray-300 px-3 py-2 text-center text-gray-700 font-semibold">사은품 혜택</th>
-            <th className="border border-gray-300 px-3 py-2 text-center text-gray-700 font-semibold">변경 요금/월</th>
-          </tr>
-        </thead>
-        <tbody>
-          {DIGITAL_IPTV_LIST.map((item, i) => {
-            const row = rows.find(r => r['정책_중분류'] === item.j && r['정책_소분류'] === item.b);
-            const c = jbCfg(item.j);
-            return (
-              <tr key={i} className="hover:brightness-95">
-                <td className={`border border-gray-300 px-3 py-2 font-medium ${c.cell}`}>
-                  <span className={`text-xs font-bold px-1.5 py-0.5 rounded ${c.hd}`}>{item.j}</span>
-                </td>
-                <td className={`border border-gray-300 px-3 py-2 ${c.cell}`}>{item.b}</td>
-                <td className="border border-gray-300 px-3 py-2 text-center font-bold text-gray-800">
-                  {row ? (fmtGift(row['사은품혜택']) || '—') : '—'}
-                </td>
-                <td className="border border-gray-300 px-3 py-2 text-center text-blue-700 font-semibold">
-                  {row?.['정책판가'] ? `${fmtPrice(row['정책판가'])}` : '—'}
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
-    </div>
+    <MatrixTable
+      rowKeys={['IPTV']}
+      rowLabel="상품"
+      cols={DIGITAL_TV_COLS}
+      lookup={lookup}
+      allRows={rows}
+    />
   );
 };
 
@@ -290,7 +257,7 @@ const DigitalPolicyBlock = ({ defaultSubTab = '주상품' }) => {
           <span className="bg-indigo-600 text-white px-2 py-0.5 rounded text-xs">IPTV</span>
           IPTV (요금대 무관)
         </h5>
-        <DigitalIPTVTable svcType={svcType} />
+        <DigitalIPTVMatrix svcType={svcType} />
       </div>
 
       {/* UHD */}
