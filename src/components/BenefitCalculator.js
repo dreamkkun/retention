@@ -41,7 +41,7 @@ const getDigitalMultiPriceGrp = (fee) => {
 const POLICY_TYPES = [
   { id: '인터넷번들_재약정', label: '인터넷 번들 재약정', desc: '인터넷+TV 번들 고객' },
   { id: '인터넷단독_재약정', label: '인터넷 단독 재약정', desc: '인터넷만 이용 고객' },
-  { id: '디지털번들_재약정', label: '디지털 번들 재약정', desc: '번들 TV 고객' },
+  { id: '디지털단독_재약정', label: '디지털단독 재약정', desc: 'TV 단독/번들 고객' },
 ];
 
 const fmt = (n) => n != null ? `${Number(n).toLocaleString()}원` : '-';
@@ -70,7 +70,7 @@ const BenefitCalculator = () => {
   // Derived price_grp
   const priceGrp = useMemo(() => {
     if (policyType === '인터넷번들_재약정') return getInternetPriceGrp(internetFee);
-    if (policyType === '디지털번들_재약정' && product && product !== 'IPTV') {
+    if (policyType === '디지털단독_재약정' && product && product !== 'IPTV') {
       if (svcType === '디지털_주상품') return getDigitalMainPriceGrp(tvFee);
       if (svcType === '디지털_복수형') return getDigitalMultiPriceGrp(tvFee);
     }
@@ -86,7 +86,7 @@ const BenefitCalculator = () => {
       if (priceGrp) rows = rows.filter(r => r['price_grp'] === priceGrp);
     } else if (policyType === '인터넷단독_재약정') {
       if (product) rows = rows.filter(r => r['상품군'] === product);
-    } else if (policyType === '디지털번들_재약정') {
+    } else if (policyType === '디지털단독_재약정') {
       if (svcType)  rows = rows.filter(r => r['svc_type'] === svcType);
       if (product)  rows = rows.filter(r => r['상품군'] === product);
       if (priceGrp) rows = rows.filter(r => r['price_grp'] === priceGrp);
@@ -98,7 +98,7 @@ const BenefitCalculator = () => {
   const availableProducts = useMemo(() => {
     if (!policyType) return [];
     let rows = policyRows.filter(r => r['정책_대분류'] === policyType);
-    if (policyType === '디지털번들_재약정' && svcType) {
+    if (policyType === '디지털단독_재약정' && svcType) {
       rows = rows.filter(r => r['svc_type'] === svcType);
     }
     return [...new Set(rows.map(r => r['상품군']).filter(Boolean))];
@@ -128,10 +128,10 @@ const BenefitCalculator = () => {
     ) || null;
   }, [filteredRows, jungbong, sobong]);
 
-  const needTvFee = policyType === '디지털번들_재약정' && svcType && product && product !== 'IPTV';
+  const needTvFee = policyType === '디지털단독_재약정' && svcType && product && product !== 'IPTV';
   const needInternetFee = policyType === '인터넷번들_재약정';
-  const needProduct = policyType === '인터넷단독_재약정' || policyType === '디지털번들_재약정';
-  const needSvcType = policyType === '디지털번들_재약정';
+  const needProduct = policyType === '인터넷단독_재약정' || policyType === '디지털단독_재약정';
+  const needSvcType = policyType === '디지털단독_재약정';
 
   return (
     <div className="max-w-4xl">
