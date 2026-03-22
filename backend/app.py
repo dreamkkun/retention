@@ -678,49 +678,14 @@ def upload_image():
             'timestamp': datetime.now().isoformat()
         })
 
-        # ── Claude Vision으로 정책 데이터 자동 추출 ──────────────
-        extraction_result = None
-        extraction_error = None
-        if ANTHROPIC_AVAILABLE and ANTHROPIC_API_KEY:
-            extracted, ext_err = extract_policy_from_image(save_path, category)
-            if extracted:
-                policies = update_policies_from_extracted(policies, category, extracted)
-                policies['metadata']['last_updated'] = datetime.now().strftime('%Y-%m-%d')
-                with open(POLICIES_JSON_PATH, 'w', encoding='utf-8') as f:
-                    json.dump(policies, f, ensure_ascii=False, indent=2)
-                extraction_result = extracted
-                print(f"✅ 정책 데이터 자동 추출 완료: {safe_name}")
-            else:
-                extraction_error = ext_err
-                print(f"⚠️ 정책 데이터 추출 실패: {ext_err}")
-
-        # 자동 git push → Vercel 자동 재배포 트리거
-        git_pushed = False
-        git_error = None
-        if AUTO_GIT_PUSH:
-            git_pushed, git_error = git_push_image(safe_name)
-
-        msg = f'이미지가 저장되었습니다: {safe_name}'
-        if extraction_result:
-            msg += '\n\n정책 데이터가 자동으로 추출되어 반영되었습니다.'
-        elif extraction_error:
-            msg += f'\n\n⚠️ 정책 데이터 자동 추출 실패: {extraction_error}'
-        else:
-            msg += '\n\n(ANTHROPIC_API_KEY를 설정하면 정책 데이터가 자동 추출됩니다)'
-
-        if git_pushed:
-            msg += '\n\nGitHub에 자동 반영되었습니다. Vercel 재배포 후 (약 1~2분) 사이트에 표시됩니다.'
-        elif AUTO_GIT_PUSH:
-            msg += f'\n\n⚠️ git push 실패 - 수동으로 push하면 Vercel에 반영됩니다.\n({git_error})'
+        # 갤러리 이미지는 정책 데이터 자동 추출하지 않음
+        # (정책 데이터 변환은 /api/convert-image-to-excel 엔드포인트 사용)
 
         return jsonify({
             'success': True,
-            'message': msg,
+            'message': f'이미지가 저장되었습니다: {safe_name}',
             'image': new_image,
-            'path': web_path,
-            'git_pushed': git_pushed,
-            'extraction': extraction_result,
-            'extraction_error': extraction_error
+            'path': web_path
         })
 
     except Exception as e:
