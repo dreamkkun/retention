@@ -242,7 +242,7 @@ const AdminDashboard = ({ onLogout, isAdmin = true }) => {
 
     XLSX.writeFile(wb, `정책_업데이트_템플릿_${new Date().toISOString().split('T')[0]}.xlsx`);
 
-    setUploadStatus({
+    setPolicyUploadStatus({
       type: 'info',
       message: '템플릿 파일이 다운로드되었습니다. 정책목록 시트에 데이터를 입력하고 업로드하세요.'
     });
