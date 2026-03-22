@@ -282,10 +282,40 @@ BACKEND_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = os.path.dirname(BACKEND_DIR)
 POLICIES_JSON_PATH = os.path.join(PROJECT_ROOT, 'src', 'data', 'policies.json')
 PUBLIC_ASSETS_PATH = os.path.join(PROJECT_ROOT, 'public', 'assets')
+BACKUPS_DIR = os.path.join(BACKEND_DIR, 'policy_backups')
 
 # IP 화이트리스트 설정
 ENABLE_IP_WHITELIST = os.getenv('ENABLE_IP_WHITELIST', 'false').lower() == 'true'
 ALLOWED_IPS = ['127.0.0.1', 'localhost']
+
+
+def save_policy_backup(reason='manual'):
+    """policies.json 백업 저장 (최대 20개 유지)"""
+    try:
+        os.makedirs(BACKUPS_DIR, exist_ok=True)
+        if not os.path.exists(POLICIES_JSON_PATH):
+            return None
+        ts = datetime.now().strftime('%Y%m%d_%H%M%S')
+        backup_name = f'policies_{ts}_{reason[:20]}.json'
+        backup_path = os.path.join(BACKUPS_DIR, backup_name)
+        with open(POLICIES_JSON_PATH, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+        with open(backup_path, 'w', encoding='utf-8') as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+        # 오래된 백업 제거 (최대 20개)
+        backups = sorted([
+            x for x in os.listdir(BACKUPS_DIR) if x.startswith('policies_') and x.endswith('.json')
+        ])
+        for old in backups[:-20]:
+            try:
+                os.unlink(os.path.join(BACKUPS_DIR, old))
+            except Exception:
+                pass
+        print(f"✅ 정책 백업 저장: {backup_name}")
+        return backup_name
+    except Exception as e:
+        print(f"⚠️ 백업 저장 실패: {e}")
+        return None
 
 
 def init_users_file():
@@ -902,6 +932,9 @@ def upload_excel():
     try:
         with open(POLICIES_JSON_PATH, 'r', encoding='utf-8') as f:
             policies = json.load(f)
+
+        # 업데이트 전 백업
+        save_policy_backup('excel_upload')
 
         # 신규 flat 형식
         if policy_data.get('policy_rows'):
@@ -1525,6 +1558,99 @@ def export_excel():
             download_name=filename,
             mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
         )
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/policy-meta', methods=['GET'])
+def get_policy_meta():
+    """policies.json 메타데이터 반환 (날짜, 버전, 행수 등)"""
+    try:
+        if not os.path.exists(POLICIES_JSON_PATH):
+            return jsonify({'error': 'policies.json 없음'}), 404
+        with open(POLICIES_JSON_PATH, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+        meta = data.get('metadata', {})
+        row_count = len(data.get('policy_rows', []))
+        return jsonify({
+            'success': True,
+            'metadata': meta,
+            'row_count': row_count
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/policy-backups', methods=['GET'])
+def list_policy_backups():
+    """정책 백업 목록 반환"""
+    try:
+        os.makedirs(BACKUPS_DIR, exist_ok=True)
+        files = sorted([
+            x for x in os.listdir(BACKUPS_DIR)
+            if x.startswith('policies_') and x.endswith('.json')
+        ], reverse=True)
+        backups = []
+        for fname in files:
+            fpath = os.path.join(BACKUPS_DIR, fname)
+            try:
+                with open(fpath, 'r', encoding='utf-8') as f:
+                    d = json.load(f)
+                meta = d.get('metadata', {})
+                row_count = len(d.get('policy_rows', []))
+                # 파일명에서 타임스탬프 파싱: policies_YYYYMMDD_HHMMSS_reason.json
+                parts = fname.replace('.json', '').split('_')
+                ts_str = f"{parts[1]}_{parts[2]}" if len(parts) >= 3 else ''
+                try:
+                    ts_dt = datetime.strptime(ts_str, '%Y%m%d_%H%M%S')
+                    display_time = ts_dt.strftime('%Y-%m-%d %H:%M:%S')
+                except Exception:
+                    display_time = fname
+                reason = '_'.join(parts[3:]) if len(parts) > 3 else ''
+                backups.append({
+                    'filename': fname,
+                    'display_time': display_time,
+                    'reason': reason,
+                    'row_count': row_count,
+                    'version': meta.get('version', ''),
+                    'last_updated': meta.get('last_updated', ''),
+                })
+            except Exception:
+                backups.append({'filename': fname, 'display_time': fname, 'row_count': 0})
+        return jsonify({'success': True, 'backups': backups})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/policy-restore/<path:filename>', methods=['POST'])
+@check_ip_whitelist
+def restore_policy_backup(filename):
+    """선택한 백업으로 policies.json 원복"""
+    try:
+        backup_path = os.path.join(BACKUPS_DIR, filename)
+        if not os.path.exists(backup_path):
+            return jsonify({'error': '백업 파일을 찾을 수 없습니다.'}), 404
+        # 현재 파일 백업 (원복 전)
+        save_policy_backup('before_restore')
+        with open(backup_path, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+        # 날짜 업데이트
+        if 'metadata' not in data:
+            data['metadata'] = {}
+        data['metadata']['last_updated'] = datetime.now().strftime('%Y-%m-%d')
+        with open(POLICIES_JSON_PATH, 'w', encoding='utf-8') as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+        log_access({
+            'action': 'POLICY_RESTORED',
+            'backup': filename,
+            'timestamp': datetime.now().isoformat()
+        })
+        return jsonify({
+            'success': True,
+            'message': f'✅ {filename} 으로 원복되었습니다.',
+            'row_count': len(data.get('policy_rows', [])),
+            'last_updated': data['metadata']['last_updated']
+        })
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 

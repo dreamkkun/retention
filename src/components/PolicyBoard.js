@@ -412,13 +412,21 @@ const PolicyBoard = () => {
   const [activeTab, setActiveTab] = useState('bundle');
   const [policyImages, setPolicyImages] = useState([]);
   const [expandedImage, setExpandedImage] = useState(null);
+  const [liveMeta, setLiveMeta] = useState(null); // 백엔드에서 실시간 메타데이터
 
   useEffect(() => {
     fetch(`${API_URL}/api/policy-images`)
       .then(r => r.json())
       .then(d => setPolicyImages(d.images?.length ? d.images : (policiesData.policy_images || [])))
       .catch(() => setPolicyImages(policiesData.policy_images || []));
+
+    fetch(`${API_URL}/api/policy-meta`)
+      .then(r => r.json())
+      .then(d => { if (d.success) setLiveMeta(d.metadata); })
+      .catch(() => {}); // 백엔드 오프라인이면 정적 데이터 사용
   }, []);
+
+  const meta = liveMeta || policiesData.metadata || {};
 
   const getImgSrc = (img) => {
     const fn = img.filename || '';
@@ -434,22 +442,16 @@ const PolicyBoard = () => {
   return (
     <div>
       {/* 헤더 */}
-      <div className="bg-gray-100 border border-gray-300 px-5 py-4 mb-5 flex justify-between items-center">
-        <div>
-          <h2 className="text-xl font-bold text-gray-800">
-            {policiesData.metadata?.update_week ? `[${policiesData.metadata.update_week}] ` : ''}
-            인터넷/TV 리텐션 정책
-          </h2>
-          {policiesData.metadata?.last_updated && (
-            <p className="text-sm text-gray-500 mt-0.5">
-              최종 업데이트: {policiesData.metadata.last_updated}
-            </p>
-          )}
-        </div>
-        <div className="text-right">
-          <div className="text-xs text-gray-500">정책 행수</div>
-          <div className="text-2xl font-bold text-gray-700">{policyRows.length}</div>
-        </div>
+      <div className="bg-gray-100 border border-gray-300 px-5 py-4 mb-5">
+        <h2 className="text-xl font-bold text-gray-800">
+          {meta.update_week ? `[${meta.update_week}] ` : ''}
+          인터넷/TV 리텐션 정책
+        </h2>
+        {meta.last_updated && (
+          <p className="text-sm text-gray-500 mt-0.5">
+            최종 업데이트: {meta.last_updated}
+          </p>
+        )}
       </div>
 
       {/* 탭 */}
