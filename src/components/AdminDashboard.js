@@ -28,6 +28,39 @@ const AdminDashboard = ({ onLogout, isAdmin = true }) => {
   const [imageSubTitle, setImageSubTitle] = useState('');
   const [galleryStatus, setGalleryStatus] = useState(null);
 
+  // ── 원복 ─────────────────────────────────────────────────────────────────────
+  const [backups, setBackups] = useState([]);
+  const [restoreStatus, setRestoreStatus] = useState(null);
+  const [restoringFile, setRestoringFile] = useState(null);
+
+  const loadBackups = () => {
+    fetch(`${API_URL}/api/policy-backups`)
+      .then(r => r.json())
+      .then(d => { if (d.success) setBackups(d.backups); })
+      .catch(() => {});
+  };
+
+  const handleRestore = (filename) => {
+    if (!window.confirm(`"${filename}" 시점으로 정책을 원복합니다. 계속하시겠습니까?`)) return;
+    setRestoringFile(filename);
+    setRestoreStatus(null);
+    fetch(`${API_URL}/api/policy-restore/${encodeURIComponent(filename)}`, { method: 'POST' })
+      .then(r => r.json())
+      .then(data => {
+        setRestoringFile(null);
+        if (data.success) {
+          setRestoreStatus({ type: 'success', message: `✅ 원복 완료 (${data.row_count}행, ${data.last_updated})` });
+          loadBackups();
+        } else {
+          setRestoreStatus({ type: 'error', message: `오류: ${data.error}` });
+        }
+      })
+      .catch(e => {
+        setRestoringFile(null);
+        setRestoreStatus({ type: 'error', message: `서버 오류: ${e.message}` });
+      });
+  };
+
   // 백엔드 서버 상태 확인
   React.useEffect(() => {
     fetch(`${API_URL}/api/health`)
@@ -37,6 +70,7 @@ const AdminDashboard = ({ onLogout, isAdmin = true }) => {
         setBackendCaps({ visionApi: data.vision_api, excelExport: data.excel_export });
       })
       .catch(() => setBackendStatus('offline'));
+    loadBackups();
   }, []);
 
   const handleExcelExport = () => {
@@ -104,6 +138,7 @@ const AdminDashboard = ({ onLogout, isAdmin = true }) => {
         setApplying(false);
         if (data.success) {
           setPolicyUploadStatus({ type: 'success', message: `✅ ${data.message}` });
+          loadBackups(); // 백업 목록 갱신
           if (onDone) onDone();
         } else {
           setPolicyUploadStatus({
@@ -489,6 +524,72 @@ const AdminDashboard = ({ onLogout, isAdmin = true }) => {
                 {backendStatus === 'online' ? '📥 현재 정책 Excel 다운로드' : '(백엔드 서버 필요)'}
               </button>
             </div>
+          </div>
+
+          {/* ── 정책 원복 ── */}
+          <div className="card col-span-full">
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-xl font-bold text-gray-800">↩️ 정책 원복</h2>
+              <button
+                onClick={loadBackups}
+                disabled={backendStatus !== 'online'}
+                className="text-xs px-3 py-1 border border-gray-300 rounded hover:bg-gray-50 text-gray-600 transition-colors"
+              >
+                새로고침
+              </button>
+            </div>
+            <p className="text-xs text-gray-500 mb-3">정책 업로드 시 자동 저장된 백업에서 이전 상태로 복원합니다. (최대 20개 보관)</p>
+
+            {restoreStatus && (
+              <div className={`mb-3 p-3 rounded border text-sm ${
+                restoreStatus.type === 'success' ? 'bg-green-50 border-green-300 text-green-800'
+                : 'bg-red-50 border-red-300 text-red-800'
+              }`}>
+                {restoreStatus.message}
+              </div>
+            )}
+
+            {backendStatus !== 'online' ? (
+              <p className="text-sm text-gray-400 text-center py-4">백엔드 서버 연결 필요</p>
+            ) : backups.length === 0 ? (
+              <p className="text-sm text-gray-400 text-center py-4">저장된 백업이 없습니다. 정책을 업로드하면 자동으로 백업됩니다.</p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm border-collapse">
+                  <thead>
+                    <tr className="bg-gray-50 border border-gray-200">
+                      <th className="px-3 py-2 text-left text-xs text-gray-600 font-semibold">백업 시각</th>
+                      <th className="px-3 py-2 text-left text-xs text-gray-600 font-semibold">사유</th>
+                      <th className="px-3 py-2 text-center text-xs text-gray-600 font-semibold">행수</th>
+                      <th className="px-3 py-2 text-center text-xs text-gray-600 font-semibold">버전</th>
+                      <th className="px-3 py-2 text-center text-xs text-gray-600 font-semibold">복원</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {backups.map((b, i) => (
+                      <tr key={b.filename} className={`border-b border-gray-100 ${i === 0 ? 'bg-blue-50' : 'hover:bg-gray-50'}`}>
+                        <td className="px-3 py-2 text-xs font-mono text-gray-700">
+                          {b.display_time}
+                          {i === 0 && <span className="ml-1 text-blue-600 font-semibold">(최신)</span>}
+                        </td>
+                        <td className="px-3 py-2 text-xs text-gray-500">{b.reason || '-'}</td>
+                        <td className="px-3 py-2 text-center text-xs text-gray-700">{b.row_count}</td>
+                        <td className="px-3 py-2 text-center text-xs text-gray-500">{b.version || '-'}</td>
+                        <td className="px-3 py-2 text-center">
+                          <button
+                            onClick={() => handleRestore(b.filename)}
+                            disabled={restoringFile === b.filename}
+                            className="px-3 py-1 bg-red-600 hover:bg-red-700 disabled:bg-gray-400 text-white text-xs font-semibold rounded transition-colors"
+                          >
+                            {restoringFile === b.filename ? '복원 중...' : '원복'}
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
 
           {/* 템플릿 다운로드 */}
