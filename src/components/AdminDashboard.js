@@ -4,17 +4,29 @@ import UserManagement from './UserManagement';
 import API_URL from '../config';
 
 const AdminDashboard = ({ onLogout, isAdmin = true }) => {
-  const [uploadStatus, setUploadStatus] = useState(null);
-  const [selectedFile, setSelectedFile] = useState(null);
-  const [uploadType, setUploadType] = useState('excel'); // 'excel' or 'image'
+  // 백엔드 상태
+  const [backendStatus, setBackendStatus] = useState('checking');
+  const [backendCaps, setBackendCaps] = useState({});
+  const [activeSection, setActiveSection] = useState('upload');
+
+  // ── 정책 업로드 (이미지→엑셀 변환 / 엑셀 직접 업로드) ──────────────────
+  const [policyFile, setPolicyFile] = useState(null);           // 선택된 파일
+  const [policyFileType, setPolicyFileType] = useState('');     // 'image' | 'excel' | ''
+  const [policyUploadStatus, setPolicyUploadStatus] = useState(null);
+  // 변환 결과 (이미지→엑셀)
+  const [converting, setConverting] = useState(false);
+  const [convertedRows, setConvertedRows] = useState(null);     // 추출된 policy_rows
+  const [convertedInfo, setConvertedInfo] = useState(null);     // { title, version, rowCount }
+  // 재업로드용 파일 (검증 후 수정된 엑셀)
+  const [reuploadFile, setReuploadFile] = useState(null);
+  const [applying, setApplying] = useState(false);
+
+  // ── 이미지 갤러리 업로드 (정책표 참고 이미지) ─────────────────────────────
+  const [galleryFile, setGalleryFile] = useState(null);
   const [imageTitle, setImageTitle] = useState('');
   const [imageCategory, setImageCategory] = useState('bundle');
   const [imageSubTitle, setImageSubTitle] = useState('');
-  const [backendStatus, setBackendStatus] = useState('checking'); // 'checking', 'online', 'offline'
-  const [backendCaps, setBackendCaps] = useState({}); // vision_api, excel_export
-  const [activeSection, setActiveSection] = useState('upload'); // 'upload', 'users'
-  const [lastUploadedImage, setLastUploadedImage] = useState(null);
-  const [extractionStatus, setExtractionStatus] = useState(null);
+  const [galleryStatus, setGalleryStatus] = useState(null);
 
   // 백엔드 서버 상태 확인
   React.useEffect(() => {
@@ -27,129 +39,121 @@ const AdminDashboard = ({ onLogout, isAdmin = true }) => {
       .catch(() => setBackendStatus('offline'));
   }, []);
 
-  const handleExcelUpload = (file) => {
-    const formData = new FormData();
-    formData.append('file', file);
-
-    setUploadStatus({ type: 'info', message: '엑셀 파일 처리 중...' });
-
-    fetch(`${API_URL}/api/upload-excel`, { method: 'POST', body: formData })
-      .then(response => response.json())
-      .then(data => {
-        if (data.success) {
-          setUploadStatus({
-            type: 'success',
-            message: `✅ ${data.message}`
-          });
-          setSelectedFile(null);
-        } else {
-          const errorMsg = data.reason
-            ? `오류: ${data.error}\n\n${data.reason}`
-            : `오류: ${data.error || '알 수 없는 오류'}`;
-          setUploadStatus({ type: 'error', message: errorMsg });
-        }
-      })
-      .catch(error => {
-        setUploadStatus({
-          type: 'error',
-          message: `서버 연결 실패: ${error.message}\n\n백엔드 서버가 실행 중인지 확인하세요.`
-        });
-      });
-  };
-
-  const handleImageUpload = (file) => {
-    const formData = new FormData();
-    formData.append('file', file);
-    // 가치제고는 세부 구분(후번들/UHD전환/업셀링)을 제목에 포함
-    const baseTitle = imageTitle || file.name.replace(/\.[^/.]+$/, '');
-    const finalTitle = (imageCategory === 'value' && imageSubTitle)
-      ? `${imageSubTitle}`
-      : baseTitle;
-    formData.append('title', finalTitle);
-    formData.append('category', imageCategory);
-
-    setUploadStatus({
-      type: 'info',
-      message: '이미지 업로드 중...'
-    });
-
-    fetch(`${API_URL}/api/upload-image`, {
-      method: 'POST',
-      body: formData
-    })
-      .then(response => response.json())
-      .then(data => {
-        if (data.success) {
-          setUploadStatus({
-            type: 'success',
-            message: `✅ ${data.message}`
-          });
-          setLastUploadedImage({ filename: data.image?.filename, category: imageCategory });
-          if (data.extraction) {
-            setExtractionStatus({ success: true, data: data.extraction });
-          } else if (data.extraction_error) {
-            setExtractionStatus({ success: false, error: data.extraction_error });
-          }
-          setSelectedFile(null);
-        } else {
-          setUploadStatus({
-            type: 'error',
-            message: data.error || '업로드 실패'
-          });
-        }
-      })
-      .catch(error => {
-        setUploadStatus({
-          type: 'error',
-          message: `서버 연결 실패: ${error.message}\n\n로컬 백엔드가 실행 중인지 확인하세요. (localhost:3000에서 사용)`
-        });
-      });
-  };
-
-  const handleExtractPolicy = (imageInfo) => {
-    setExtractionStatus({ loading: true });
-    fetch(`${API_URL}/api/extract-policy`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ filename: imageInfo.filename, category: imageInfo.category })
-    })
-      .then(r => r.json())
-      .then(data => {
-        if (data.success) {
-          setExtractionStatus({ success: true, data: data.extracted });
-        } else {
-          setExtractionStatus({ success: false, error: data.reason || data.error });
-        }
-      })
-      .catch(e => setExtractionStatus({ success: false, error: e.message }));
-  };
-
   const handleExcelExport = () => {
     window.open(`${API_URL}/api/export-excel`, '_blank');
   };
 
-  const handleFileChange = (e) => {
+  // ── 파일 선택 (정책 업로드용) ──────────────────────────────────────────────
+  const handlePolicyFileChange = (e) => {
     const file = e.target.files[0];
     if (!file) return;
-
-    setSelectedFile(file);
-    setUploadStatus(null);
+    const isImage = /\.(png|jpe?g)$/i.test(file.name);
+    const isExcel = /\.(xlsx?|xlsm)$/i.test(file.name);
+    setPolicyFile(file);
+    setPolicyFileType(isImage ? 'image' : isExcel ? 'excel' : '');
+    setPolicyUploadStatus(null);
+    setConvertedRows(null);
+    setConvertedInfo(null);
+    setReuploadFile(null);
   };
 
-  const handleUpload = () => {
-    if (!selectedFile) {
-      setUploadStatus({
-        type: 'error',
-        message: '파일을 선택해주세요.'
+  // ── 이미지 → AI 변환 ────────────────────────────────────────────────────────
+  const handleConvertImage = () => {
+    if (!policyFile) return;
+    setConverting(true);
+    setPolicyUploadStatus(null);
+    const formData = new FormData();
+    formData.append('file', policyFile);
+    fetch(`${API_URL}/api/convert-image-to-excel`, { method: 'POST', body: formData })
+      .then(r => r.json())
+      .then(data => {
+        setConverting(false);
+        if (data.success) {
+          setConvertedRows(data.policy_rows);
+          setConvertedInfo({ title: data.title, version: data.version, rowCount: data.row_count });
+        } else {
+          setPolicyUploadStatus({ type: 'error', message: data.reason ? `${data.error}\n\n${data.reason}` : data.error });
+        }
+      })
+      .catch(e => {
+        setConverting(false);
+        setPolicyUploadStatus({ type: 'error', message: `서버 연결 실패: ${e.message}` });
       });
-      return;
-    }
+  };
 
-    if (uploadType === 'excel') {
-      handleExcelUpload(selectedFile);
-    } else {
-      handleImageUpload(selectedFile);
-    }
+  // ── 변환된 rows → Excel 다운로드 (브라우저에서 생성) ──────────────────────
+  const downloadConvertedExcel = (rows) => {
+    const COLS = ['svc_type', '단독_번들여부', '상품군', '약정구분', 'price_grp',
+                  '정책_대분류', '정책_중분류', '정책_소분류', '정책판가',
+                  '사은품혜택', '요금할인액', '무료개월', '기타특이사항'];
+    const ws = XLSX.utils.json_to_sheet(rows, { header: COLS });
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, '정책목록');
+    const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 16);
+    XLSX.writeFile(wb, `정책_AI변환_${ts}.xlsx`);
+  };
+
+  // ── 엑셀 → 정책 반영 (공통) ─────────────────────────────────────────────────
+  const uploadExcelToPolicy = (file, onDone) => {
+    setApplying(true);
+    const formData = new FormData();
+    formData.append('file', file);
+    fetch(`${API_URL}/api/upload-excel`, { method: 'POST', body: formData })
+      .then(r => r.json())
+      .then(data => {
+        setApplying(false);
+        if (data.success) {
+          setPolicyUploadStatus({ type: 'success', message: `✅ ${data.message}` });
+          if (onDone) onDone();
+        } else {
+          setPolicyUploadStatus({
+            type: 'error',
+            message: data.reason ? `오류: ${data.error}\n\n${data.reason}` : `오류: ${data.error || '알 수 없는 오류'}`
+          });
+        }
+      })
+      .catch(e => {
+        setApplying(false);
+        setPolicyUploadStatus({ type: 'error', message: `서버 연결 실패: ${e.message}` });
+      });
+  };
+
+  // 변환된 rows를 바로 적용 (Excel 재생성 후 upload-excel)
+  const applyConvertedRows = () => {
+    if (!convertedRows) return;
+    const COLS = ['svc_type', '단독_번들여부', '상품군', '약정구분', 'price_grp',
+                  '정책_대분류', '정책_중분류', '정책_소분류', '정책판가',
+                  '사은품혜택', '요금할인액', '무료개월', '기타특이사항'];
+    const ws = XLSX.utils.json_to_sheet(convertedRows, { header: COLS });
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, '정책목록');
+    const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+    const blob = new Blob([wbout], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const file = new File([blob], 'converted_policy.xlsx', { type: blob.type });
+    uploadExcelToPolicy(file, () => { setConvertedRows(null); setConvertedInfo(null); setPolicyFile(null); });
+  };
+
+  // ── 이미지 갤러리 업로드 ─────────────────────────────────────────────────────
+  const handleGalleryUpload = () => {
+    if (!galleryFile) return;
+    const formData = new FormData();
+    formData.append('file', galleryFile);
+    const baseTitle = imageTitle || galleryFile.name.replace(/\.[^/.]+$/, '');
+    const finalTitle = (imageCategory === 'value' && imageSubTitle) ? imageSubTitle : baseTitle;
+    formData.append('title', finalTitle);
+    formData.append('category', imageCategory);
+    setGalleryStatus({ type: 'info', message: '업로드 중...' });
+    fetch(`${API_URL}/api/upload-image`, { method: 'POST', body: formData })
+      .then(r => r.json())
+      .then(data => {
+        if (data.success) {
+          setGalleryStatus({ type: 'success', message: `✅ ${data.message}` });
+          setGalleryFile(null);
+        } else {
+          setGalleryStatus({ type: 'error', message: data.error || '업로드 실패' });
+        }
+      })
+      .catch(e => setGalleryStatus({ type: 'error', message: `서버 연결 실패: ${e.message}` }));
   };
 
   const downloadTemplate = () => {
@@ -270,159 +274,202 @@ const AdminDashboard = ({ onLogout, isAdmin = true }) => {
       {activeSection === 'upload' ? (
         <div>
           <div className="grid md:grid-cols-2 gap-6">
-        {/* 정책 업로드 */}
+        {/* ── 정책 데이터 업로드 ── */}
         <div className="card">
-          <h2 className="text-xl font-bold text-gray-800 mb-4">
-            📤 정책 업로드
-          </h2>
+          <h2 className="text-xl font-bold text-gray-800 mb-1">📤 정책 데이터 업로드</h2>
+          <p className="text-xs text-gray-500 mb-4">이미지 또는 엑셀 파일을 선택하면 자동으로 처리 방법이 결정됩니다.</p>
 
           <div className="space-y-4">
-                <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  업로드 유형
-                </label>
-                <select
-                  value={uploadType}
-                  onChange={(e) => setUploadType(e.target.value)}
-                  className="w-full px-4 py-2 border border-gray-300 rounded focus:border-gray-500 focus:outline-none"
+            {/* 파일 선택 */}
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 mb-2">파일 선택 (.xlsx / .png / .jpg)</label>
+              <input
+                type="file"
+                accept=".xlsx,.xls,.xlsm,.png,.jpg,.jpeg"
+                onChange={handlePolicyFileChange}
+                className="w-full px-3 py-2 border border-gray-300 rounded text-sm focus:border-gray-500 focus:outline-none"
+              />
+            </div>
+
+            {/* 감지된 파일 유형 배지 */}
+            {policyFile && (
+              <div className={`flex items-center gap-2 px-3 py-2 rounded border text-sm ${
+                policyFileType === 'image' ? 'bg-purple-50 border-purple-300 text-purple-800'
+                : policyFileType === 'excel' ? 'bg-green-50 border-green-300 text-green-800'
+                : 'bg-gray-50 border-gray-300 text-gray-600'
+              }`}>
+                <span className="font-bold">
+                  {policyFileType === 'image' ? '🖼️ 이미지 파일' : policyFileType === 'excel' ? '📊 엑셀 파일' : '⚠️ 지원하지 않는 형식'}
+                </span>
+                <span className="text-xs opacity-70">{policyFile.name}</span>
+              </div>
+            )}
+
+            {/* ── 이미지 경로: AI 변환 흐름 ── */}
+            {policyFileType === 'image' && !convertedRows && (
+              <div className="bg-purple-50 border border-purple-200 rounded p-4">
+                <p className="text-sm text-purple-800 font-semibold mb-2">AI가 이미지에서 정책 데이터를 추출합니다</p>
+                <ol className="text-xs text-purple-700 space-y-1 mb-3 list-decimal list-inside">
+                  <li>AI가 이미지 분석 → 정책 데이터 추출</li>
+                  <li>엑셀 다운로드 → 검증 및 수정</li>
+                  <li>수정된 엑셀 재업로드 → 정책 반영</li>
+                </ol>
+                {!backendCaps.visionApi ? (
+                  <div className="bg-yellow-50 border border-yellow-300 rounded p-3 text-xs text-yellow-800">
+                    <p className="font-semibold mb-1">⚠️ AI 변환 비활성 상태</p>
+                    <p>백엔드 서버에 ANTHROPIC_API_KEY를 설정하세요:</p>
+                    <code className="bg-yellow-100 px-2 py-0.5 rounded block mt-1">set ANTHROPIC_API_KEY=sk-ant-...</code>
+                  </div>
+                ) : (
+                  <button
+                    onClick={handleConvertImage}
+                    disabled={converting || backendStatus !== 'online'}
+                    className="w-full bg-purple-600 hover:bg-purple-700 disabled:bg-purple-300 text-white font-semibold py-2.5 rounded transition-colors text-sm"
+                  >
+                    {converting ? '🔄 AI 변환 중... (수십 초 소요)' : '🤖 AI로 정책 데이터 변환'}
+                  </button>
+                )}
+              </div>
+            )}
+
+            {/* ── 변환 완료: 검증 및 적용 ── */}
+            {convertedRows && convertedInfo && (
+              <div className="bg-green-50 border border-green-300 rounded p-4 space-y-3">
+                <div className="flex items-center gap-2">
+                  <span className="text-green-700 font-bold text-sm">✅ 변환 완료</span>
+                  <span className="text-xs bg-green-100 border border-green-300 text-green-700 px-2 py-0.5 rounded">
+                    {convertedInfo.rowCount}행 추출
+                  </span>
+                  {convertedInfo.title && (
+                    <span className="text-xs text-green-600">{convertedInfo.title}</span>
+                  )}
+                </div>
+
+                {/* 엑셀 다운로드 */}
+                <button
+                  onClick={() => downloadConvertedExcel(convertedRows)}
+                  className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 rounded text-sm transition-colors"
                 >
-                  <option value="excel">📊 엑셀 파일 (.xlsx)</option>
-                  <option value="image">🖼️ 이미지 파일 (.png, .jpg)</option>
+                  📥 변환된 엑셀 다운로드 (검증/수정용)
+                </button>
+
+                {/* 수정 없이 바로 적용 */}
+                <button
+                  onClick={applyConvertedRows}
+                  disabled={applying}
+                  className="w-full bg-emerald-600 hover:bg-emerald-700 disabled:bg-gray-400 text-white font-semibold py-2 rounded text-sm transition-colors"
+                >
+                  {applying ? '⏳ 적용 중...' : '✓ 수정 없이 바로 적용'}
+                </button>
+
+                {/* 구분선 */}
+                <div className="relative border-t border-green-200 pt-2">
+                  <span className="absolute -top-2.5 left-1/2 -translate-x-1/2 bg-green-50 px-2 text-xs text-green-500">또는</span>
+                </div>
+
+                {/* 수정 후 재업로드 */}
+                <div>
+                  <p className="text-xs text-gray-600 mb-1.5 font-semibold">수정 후 재업로드</p>
+                  <input
+                    type="file"
+                    accept=".xlsx,.xls"
+                    onChange={e => setReuploadFile(e.target.files[0] || null)}
+                    className="w-full text-xs px-2 py-1.5 border border-gray-300 rounded"
+                  />
+                  {reuploadFile && (
+                    <button
+                      onClick={() => uploadExcelToPolicy(reuploadFile, () => { setConvertedRows(null); setConvertedInfo(null); setPolicyFile(null); setReuploadFile(null); })}
+                      disabled={applying}
+                      className="w-full mt-2 bg-gray-700 hover:bg-gray-800 disabled:bg-gray-400 text-white font-semibold py-2 rounded text-sm transition-colors"
+                    >
+                      {applying ? '⏳ 적용 중...' : `📤 ${reuploadFile.name} 적용`}
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* ── 엑셀 경로: 직접 업로드 ── */}
+            {policyFileType === 'excel' && (
+              <div className="bg-green-50 border border-green-200 rounded p-4">
+                <p className="text-sm text-green-800 font-semibold mb-1">정의된 양식의 엑셀 파일입니다</p>
+                <p className="text-xs text-green-700 mb-3">13컬럼 형식(svc_type, 정책_대분류, 사은품혜택 등)을 자동 감지하여 policies.json에 반영합니다.</p>
+                <button
+                  onClick={() => uploadExcelToPolicy(policyFile, () => setPolicyFile(null))}
+                  disabled={applying || backendStatus !== 'online'}
+                  className="w-full bg-green-700 hover:bg-green-800 disabled:bg-gray-400 text-white font-semibold py-2.5 rounded text-sm transition-colors"
+                >
+                  {applying ? '⏳ 적용 중...' : '📤 정책 반영'}
+                </button>
+              </div>
+            )}
+
+            {/* 상태 메시지 */}
+            {policyUploadStatus && (
+              <div className={`p-4 rounded border text-sm ${
+                policyUploadStatus.type === 'success' ? 'bg-green-50 border-green-300 text-green-800'
+                : policyUploadStatus.type === 'error' ? 'bg-red-50 border-red-300 text-red-800'
+                : 'bg-blue-50 border-blue-300 text-blue-800'
+              }`}>
+                <p className="font-semibold whitespace-pre-line">{policyUploadStatus.message}</p>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* ── 정책표 이미지 갤러리 업로드 ── */}
+        <div className="card">
+          <h2 className="text-xl font-bold text-gray-800 mb-1">🖼️ 정책표 이미지 업로드</h2>
+          <p className="text-xs text-gray-500 mb-4">정책표 참고 이미지를 업로드합니다. 정책보드 화면에 표시됩니다.</p>
+          <div className="space-y-3">
+            <div>
+              <label className="block text-xs font-semibold text-gray-700 mb-1">제목 (선택)</label>
+              <input type="text" value={imageTitle} onChange={e => setImageTitle(e.target.value)}
+                placeholder="예: 번들 재약정 정책" className="w-full px-3 py-1.5 border border-gray-300 rounded text-sm focus:outline-none" />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-gray-700 mb-1">카테고리</label>
+              <select value={imageCategory} onChange={e => { setImageCategory(e.target.value); setImageSubTitle(''); }}
+                className="w-full px-3 py-1.5 border border-gray-300 rounded text-sm focus:outline-none">
+                <option value="bundle">번들</option>
+                <option value="bundle2">번들(특화)</option>
+                <option value="standalone">단독</option>
+                <option value="care">요금인상Care</option>
+                <option value="value">가치제고</option>
+              </select>
+            </div>
+            {imageCategory === 'value' && (
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1">가치제고 세부 구분</label>
+                <select value={imageSubTitle} onChange={e => setImageSubTitle(e.target.value)}
+                  className="w-full px-3 py-1.5 border border-gray-300 rounded text-sm focus:outline-none">
+                  <option value="">선택하세요</option>
+                  <option value="후번들">후번들</option>
+                  <option value="UHD전환">UHD전환</option>
+                  <option value="업셀링">업셀링</option>
                 </select>
               </div>
-
-              {uploadType === 'image' && (
-                <>
-                  <div>
-                    <label className="block text-sm font-semibold text-gray-700 mb-2">제목 (선택)</label>
-                    <input
-                      type="text"
-                      value={imageTitle}
-                      onChange={(e) => setImageTitle(e.target.value)}
-                      placeholder="예: 번들 재약정 정책"
-                      className="w-full px-4 py-2 border border-gray-300 rounded focus:border-gray-500 focus:outline-none"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-semibold text-gray-700 mb-2">카테고리</label>
-                    <select
-                      value={imageCategory}
-                      onChange={(e) => { setImageCategory(e.target.value); setImageSubTitle(''); }}
-                      className="w-full px-4 py-2 border border-gray-300 rounded focus:border-gray-500 focus:outline-none"
-                    >
-                      <option value="bundle">번들</option>
-                      <option value="bundle2">번들(특화)</option>
-                      <option value="standalone">단독</option>
-                      <option value="care">요금인상Care</option>
-                      <option value="value">가치제고 (후번들/UHD전환/업셀링)</option>
-                    </select>
-                  </div>
-                  {imageCategory === 'value' && (
-                    <div>
-                      <label className="block text-sm font-semibold text-gray-700 mb-2">가치제고 세부 구분</label>
-                      <select
-                        value={imageSubTitle}
-                        onChange={(e) => setImageSubTitle(e.target.value)}
-                        className="w-full px-4 py-2 border border-gray-300 rounded focus:border-gray-500 focus:outline-none"
-                      >
-                        <option value="">선택하세요</option>
-                        <option value="후번들">후번들</option>
-                        <option value="UHD전환">UHD전환</option>
-                        <option value="업셀링">업셀링</option>
-                      </select>
-                    </div>
-                  )}
-                </>
-              )}
-
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  파일 선택
-                </label>
-                <input
-                  type="file"
-                  onChange={handleFileChange}
-                  accept={uploadType === 'excel' ? '.xlsx,.xls' : 'image/*'}
-                  className="w-full px-4 py-2 border border-gray-300 rounded focus:border-gray-500 focus:outline-none"
-                />
-              </div>
-
-                {selectedFile && (
-                <div className="bg-gray-50 border border-gray-300 p-3 rounded">
-                  <p className="text-sm text-gray-700">
-                    선택된 파일: <span className="font-semibold">{selectedFile.name}</span>
-                  </p>
-                </div>
-              )}
-
-              <button
-                onClick={handleUpload}
-                disabled={!selectedFile}
-                className="w-full bg-gray-700 hover:bg-gray-800 disabled:bg-gray-400 text-white font-semibold py-3 rounded transition-colors"
-              >
-                업로드
-              </button>
-
-              {uploadStatus && (
-                <div
-                  className={`p-4 rounded border ${
-                    uploadStatus.type === 'success'
-                      ? 'bg-green-50 border-green-300 text-green-800'
-                      : uploadStatus.type === 'error'
-                      ? 'bg-red-50 border-red-300 text-red-800'
-                      : 'bg-blue-50 border-blue-300 text-blue-800'
-                  }`}
-                >
-                  <p className="font-semibold whitespace-pre-line">{uploadStatus.message}</p>
-                </div>
-              )}
-
-              {/* 정책 데이터 추출 패널 */}
-              {lastUploadedImage && uploadType === 'image' && (
-                <div className="border border-blue-300 rounded bg-blue-50 p-4">
-                  <h4 className="font-semibold text-blue-800 mb-2">정책 데이터 추출</h4>
-                  {!backendCaps.visionApi ? (
-                    <div className="text-sm text-gray-600">
-                      <p className="mb-1">AI 자동 추출을 사용하려면 백엔드 서버에 환경변수를 설정하세요:</p>
-                      <code className="bg-gray-200 px-2 py-1 rounded text-xs block">set ANTHROPIC_API_KEY=sk-ant-...</code>
-                      <p className="mt-1 text-xs text-gray-500">설정 후 서버 재시작 필요</p>
-                    </div>
-                  ) : (
-                    <>
-                      <p className="text-sm text-blue-700 mb-3">업로드된 이미지에서 AI가 정책 표를 자동으로 읽어 데이터를 추출합니다.</p>
-                      <button
-                        onClick={() => handleExtractPolicy(lastUploadedImage)}
-                        disabled={extractionStatus?.loading}
-                        className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 text-white font-semibold py-2 rounded transition-colors"
-                      >
-                        {extractionStatus?.loading ? '추출 중...' : '정책 데이터 자동 추출 (AI)'}
-                      </button>
-                    </>
-                  )}
-
-                  {extractionStatus && !extractionStatus.loading && (
-                    <div className={`mt-3 p-3 rounded border text-sm ${
-                      extractionStatus.success
-                        ? 'bg-green-50 border-green-300 text-green-800'
-                        : 'bg-red-50 border-red-300 text-red-800'
-                    }`}>
-                      {extractionStatus.success ? (
-                        <>
-                          <p className="font-semibold mb-1">✅ 데이터 추출 완료</p>
-                          <p>문서: {extractionStatus.data?.title || '번들 정책'}</p>
-                          <p>버전: {extractionStatus.data?.version || '-'}</p>
-                          <p>추출된 요금대: {extractionStatus.data?.internet?.rows?.length || 0}개</p>
-                          <p className="mt-1 text-xs">policies.json에 반영되었습니다. 시뮬레이션에서 즉시 사용 가능합니다.</p>
-                        </>
-                      ) : (
-                        <p>추출 실패: {extractionStatus.error}</p>
-                      )}
-                    </div>
-                  )}
-                </div>
-              )}
+            )}
+            <div>
+              <label className="block text-xs font-semibold text-gray-700 mb-1">이미지 파일</label>
+              <input type="file" accept="image/*" onChange={e => setGalleryFile(e.target.files[0] || null)}
+                className="w-full text-sm px-3 py-1.5 border border-gray-300 rounded" />
             </div>
+            <button onClick={handleGalleryUpload} disabled={!galleryFile || backendStatus !== 'online'}
+              className="w-full bg-gray-700 hover:bg-gray-800 disabled:bg-gray-400 text-white font-semibold py-2 rounded text-sm transition-colors">
+              업로드
+            </button>
+            {galleryStatus && (
+              <div className={`p-3 rounded border text-xs ${
+                galleryStatus.type === 'success' ? 'bg-green-50 border-green-300 text-green-800'
+                : galleryStatus.type === 'error' ? 'bg-red-50 border-red-300 text-red-800'
+                : 'bg-blue-50 border-blue-300 text-blue-800'
+              }`}>
+                <p className="whitespace-pre-line">{galleryStatus.message}</p>
+              </div>
+            )}
           </div>
+        </div>
 
           {/* 현재 정책 Excel 내보내기 */}
           <div className="card">

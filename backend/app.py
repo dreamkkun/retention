@@ -728,6 +728,70 @@ def upload_image():
 
 
 # ========================================
+# 이미지 → 정책 데이터 변환 API (검증용, policies.json 미반영)
+# ========================================
+
+@app.route('/api/convert-image-to-excel', methods=['POST'])
+@check_ip_whitelist
+def convert_image_to_excel():
+    """정책 이미지 → policy_rows JSON 변환 (검증용, policies.json 미반영)
+    프론트엔드가 XLSX로 재생성하여 다운로드 → 검증 → 재업로드 흐름에 사용"""
+    if not ANTHROPIC_AVAILABLE or not ANTHROPIC_API_KEY:
+        return jsonify({
+            'error': 'AI 변환을 사용하려면 ANTHROPIC_API_KEY 환경변수를 설정하세요.',
+            'reason': '백엔드 서버에서: set ANTHROPIC_API_KEY=sk-ant-...'
+        }), 503
+
+    if 'file' not in request.files:
+        return jsonify({'error': '파일이 없습니다.'}), 400
+
+    file = request.files['file']
+    if file.filename == '':
+        return jsonify({'error': '파일을 선택해주세요.'}), 400
+
+    allowed_ext = ('.png', '.jpg', '.jpeg')
+    if not file.filename.lower().endswith(allowed_ext):
+        return jsonify({'error': 'PNG/JPG 이미지 파일만 지원합니다.'}), 400
+
+    try:
+        ext = os.path.splitext(file.filename)[1].lower()
+        with tempfile.NamedTemporaryFile(delete=False, suffix=ext) as tmp:
+            file.save(tmp.name)
+            tmp_path = tmp.name
+
+        extracted, err = extract_policy_from_image(tmp_path)
+        try:
+            os.unlink(tmp_path)
+        except Exception:
+            pass
+
+        if err or not extracted:
+            return jsonify({'error': f'데이터 추출 실패: {err or "추출된 데이터 없음"}'}), 500
+
+        rows = extracted.get('policy_rows', [])
+        if not rows:
+            return jsonify({'error': '이미지에서 정책 데이터를 추출할 수 없습니다. 이미지를 확인해주세요.'}), 400
+
+        log_access({
+            'action': 'CONVERT_IMAGE_TO_EXCEL',
+            'filename': file.filename,
+            'row_count': len(rows),
+            'timestamp': datetime.now().isoformat()
+        })
+
+        return jsonify({
+            'success': True,
+            'policy_rows': rows,
+            'row_count': len(rows),
+            'title': extracted.get('title', ''),
+            'version': extracted.get('version', '')
+        })
+
+    except Exception as e:
+        return jsonify({'error': f'변환 중 오류: {str(e)}'}), 500
+
+
+# ========================================
 # 이미지 서빙 및 조회 API
 # ========================================
 
